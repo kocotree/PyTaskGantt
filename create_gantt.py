@@ -116,12 +116,24 @@ if df_original is not None:
     with col_filter:
         st.subheader("🔍 筛选与操作")
 
+        # [新增] 刷新按钮
+        if st.button("🔄 刷新数据", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
+
         # A. 任务搜索
         search_term = st.text_input("搜索任务名称", placeholder="输入关键词...")
 
         # B. 机器人过滤
         all_bots = sorted(df_original["Bot"].dropna().unique().tolist())
         selected_bots = st.multiselect("筛选机器人", all_bots, default=all_bots)
+
+        # [新增] 排序选项
+        sort_option = st.selectbox(
+            "排序方式",
+            options=["按机器人分类", "按开始时间"],
+            index=0
+        )
 
         st.divider()  # 分割线
 
@@ -136,6 +148,12 @@ if df_original is not None:
         df_filtered = df_filtered[
             df_filtered["Task"].str.contains(search_term, case=False, na=False)
         ]
+
+    # [新增] 应用排序
+    if sort_option == "按开始时间":
+        df_filtered = df_filtered.sort_values(by=["Start", "Bot"])
+    else:
+        df_filtered = df_filtered.sort_values(by=["Bot", "Start"])
 
     # --- 第三步：渲染编辑器 (左侧) ---
     with col_editor:
