@@ -217,10 +217,11 @@ app.get('/api/export/:format', (req, res) => {
   }
 });
 
-// 启动服务器
-app.listen(PORT, () => {
+// 启动服务器 (0.0.0.0 允许局域网访问)
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n✨ 后端 API 服务器已启动`);
   console.log(`📍 地址: http://localhost:${PORT}`);
+  console.log(`📍 局域网: http://0.0.0.0:${PORT}`);
   console.log(`📁 数据目录: ${DATA_DIR}`);
   console.log(`\n可用接口:`);
   console.log(`  GET  /api/tasks        - 获取任务数据`);
