@@ -15,8 +15,12 @@ const PORT = 3001;
 const DATA_DIR = path.join(__dirname, 'src', 'data');
 const TASKS_JSON_PATH = path.join(DATA_DIR, 'tasks.json');
 
-// 中间件
-app.use(cors());
+// 中间件 - CORS 配置（允许局域网跨域访问）
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json({ limit: '10mb' }));
 
 // 确保数据目录存在

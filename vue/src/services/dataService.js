@@ -1,7 +1,9 @@
 // 数据服务层 - 任务数据管理 (API 版本)
 
 // 动态获取 API 地址（支持局域网访问）
-const API_BASE = `http://${window.location.hostname}:3001/api`;
+function getApiBase() {
+  return 'http://' + window.location.hostname + ':3001/api';
+}
 
 // 当前任务数据 (内存缓存)
 let tasksData = [];
@@ -61,7 +63,7 @@ function formatDuration(startTime, finishTime) {
  */
 export async function loadTasksFromServer() {
   try {
-    const response = await fetch(`${API_BASE}/tasks`);
+    const response = await fetch(`${getApiBase()}/tasks`);
     if (!response.ok) {
       throw new Error("加载失败");
     }
@@ -81,7 +83,7 @@ export async function loadTasksFromServer() {
  */
 export async function saveTasksToServer() {
   try {
-    const response = await fetch(`${API_BASE}/tasks`, {
+    const response = await fetch(`${getApiBase()}/tasks`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -106,7 +108,7 @@ export async function saveTasksToServer() {
  */
 export async function importToServer(content, format) {
   try {
-    const response = await fetch(`${API_BASE}/import`, {
+    const response = await fetch(`${getApiBase()}/import`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -133,7 +135,7 @@ export async function importToServer(content, format) {
  * 导出数据文件
  */
 export function exportFromServer(format) {
-  const url = `${API_BASE}/export/${format}`;
+  const url = `${getApiBase()}/export/${format}`;
   const link = document.createElement("a");
   link.href = url;
   link.download = `tasks_${new Date().toISOString().slice(0, 10)}.${format}`;
