@@ -1,24 +1,28 @@
 {
-  "name": "super_niubi",
+  "name": "pytaskgantt-vue-claude",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "server": "node server.cjs",
-    "start": "start /b node server.cjs && vite",
+    "start": "concurrently -k -n SERVER,VITE -c blue,green \"node server.cjs\" \"vite\"",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "echarts": "^6.0.0",
+    "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "lucide-vue-next": "^0.562.0",
+    "naive-ui": "^2.40.0",
+    "vfonts": "^0.0.3",
+    "vis-data": "^7.1.9",
+    "vis-timeline": "^7.7.3",
     "vue": "^3.5.24"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.1",
+    "concurrently": "^9.1.0",
     "vite": "^7.2.4"
   }
 }

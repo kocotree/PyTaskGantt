@@ -1,579 +1,294 @@
 <template>
-  <aside class="filter-panel glass-panel">
-    <div class="panel-header">
-      <component :is="FilterIcon" class="header-icon" />
-      <h2>筛选与操作</h2>
-    </div>
-
-    <!-- 数据操作按钮组 -->
-    <div class="action-group">
-      <button
-        class="btn btn-secondary"
-        @click="$emit('refresh')"
-        title="从服务器重新加载数据"
-      >
-        <component :is="RefreshCwIcon" class="btn-icon" />
-        刷新
-      </button>
-      <button
-        class="btn btn-secondary"
-        @click="triggerImport"
-        title="导入CSV/JSON文件到源数据"
-      >
-        <component :is="UploadIcon" class="btn-icon" />
-        导入
-      </button>
-      <button
-        class="btn btn-secondary"
-        @click="$emit('export')"
-        title="下载导出数据文件"
-      >
-        <component :is="DownloadIcon" class="btn-icon" />
-        导出
-      </button>
-    </div>
-
-    <!-- 保存按钮 -->
-    <button
-      class="btn btn-save"
-      @click="$emit('save')"
-      title="保存修改到源文件"
-    >
-      <component :is="SaveIcon" class="btn-icon" />
-      保存更改
-    </button>
-
-    <!-- 隐藏的文件输入 -->
-    <input
-      type="file"
-      ref="fileInput"
-      accept=".csv,.json"
-      style="display: none"
-      @change="handleFileSelect"
-    />
-
-    <!-- 搜索框 -->
-    <div class="filter-group">
-      <label>
-        <component :is="SearchIcon" class="label-icon" />
-        搜索任务
-      </label>
-      <div class="search-input-wrapper">
-        <input
-          type="text"
-          v-model="localSearchTerm"
-          placeholder="输入关键词..."
-          class="search-input"
-          @input="handleSearchChange"
-        />
-        <button v-if="localSearchTerm" class="clear-btn" @click="clearSearch">
-          <component :is="XIcon" />
-        </button>
+  <n-card title="筛选与操作" size="small" :bordered="true" class="filter-panel">
+    <!-- 分区一：数据 -->
+    <div class="filter-section">
+      <div class="section-title">
+        <span>数据</span>
       </div>
-    </div>
-
-    <!-- 机器人筛选 -->
-    <div class="filter-group">
-      <label>
-        <component :is="BotIcon" class="label-icon" />
-        筛选机器人
-      </label>
-      <div class="bot-checkboxes">
-        <label
-          v-for="bot in bots"
-          :key="bot"
-          class="checkbox-item"
-          :style="{ '--bot-color': getBotColor(bot).main }"
+      <n-button-group size="small" style="width: 100%; display: flex;">
+        <n-button @click="$emit('refresh')" style="flex: 1;" title="刷新数据">
+          <template #icon><n-icon><ReloadIcon /></n-icon></template>
+          刷新
+        </n-button>
+        <n-button @click="triggerImport" style="flex: 1;">
+          <template #icon><n-icon><UploadIcon /></n-icon></template>
+          导入
+        </n-button>
+        <n-dropdown
+          :options="exportOptions"
+          @select="key => $emit('export', key)"
+          trigger="click"
         >
-          <input
-            type="checkbox"
-            :value="bot"
-            v-model="localSelectedBots"
-            @change="handleBotChange"
-          />
-          <span class="checkbox-label">{{ bot }}</span>
-        </label>
-      </div>
-      <div class="bot-actions">
-        <button class="link-btn" @click="selectAllBots">全选</button>
-        <span class="divider">|</span>
-        <button class="link-btn" @click="clearAllBots">清空</button>
-      </div>
+          <n-button style="flex: 1;">
+            <template #icon><n-icon><DownloadIcon /></n-icon></template>
+            导出
+          </n-button>
+        </n-dropdown>
+      </n-button-group>
+
+      <input
+        ref="fileInputRef"
+        type="file"
+        accept=".csv,.json"
+        style="display:none"
+        @change="onFileSelected"
+      />
+
+      <n-button
+        :type="hasUnsaved ? 'warning' : 'primary'"
+        block
+        @click="$emit('save')"
+        style="margin-top: 10px;"
+      >
+        <template #icon>
+          <n-icon><SaveIcon /></n-icon>
+        </template>
+        {{ hasUnsaved ? '保存编辑器修改（待保存）' : '保存编辑器修改' }}
+      </n-button>
     </div>
 
-    <!-- 排序方式 -->
-    <div class="filter-group">
-      <label>
-        <component :is="ArrowUpDownIcon" class="label-icon" />
-        排序方式
-      </label>
-      <div class="sort-options">
-        <button
-          class="sort-btn"
-          :class="{ active: localSortBy === 'bot' }"
-          @click="handleSortChange('bot')"
+    <!-- 分区二：筛选 -->
+    <div class="filter-section">
+      <div class="section-title">
+        <span>筛选</span>
+      </div>
+
+      <n-input
+        :value="searchTerm"
+        @update:value="v => $emit('update:searchTerm', v)"
+        placeholder="搜索任务名称..."
+        clearable
+        size="small"
+      >
+        <template #prefix>
+          <n-icon><SearchIcon /></n-icon>
+        </template>
+      </n-input>
+
+      <div style="margin-top: 12px;">
+        <div class="section-title" style="margin-bottom: 8px;">
+          <span style="font-size: 11px;">机器人</span>
+          <span>
+            <a class="section-title-link" @click.prevent="selectAllBots">全选</a>
+            <span style="margin: 0 4px; color: rgba(0,0,0,0.15);">/</span>
+            <a class="section-title-link" @click.prevent="clearBots">清空</a>
+          </span>
+        </div>
+        <n-checkbox-group
+          :value="selectedBots"
+          @update:value="v => $emit('update:selectedBots', v)"
         >
-          按机器人
-        </button>
-        <button
-          class="sort-btn"
-          :class="{ active: localSortBy === 'time' }"
-          @click="handleSortChange('time')"
+          <n-space vertical :size="6">
+            <n-checkbox v-for="bot in allBots" :key="bot" :value="bot">
+              <span class="bot-checkbox-row">
+                <span class="bot-checkbox-row-label">
+                  <span class="bot-checkbox-row-dot" :style="{ background: getBotColor(bot) }"></span>
+                  {{ bot }}
+                </span>
+                <span class="bot-checkbox-row-count">{{ botCounts[bot] || 0 }}</span>
+              </span>
+            </n-checkbox>
+          </n-space>
+        </n-checkbox-group>
+      </div>
+
+      <div style="margin-top: 12px;">
+        <div class="section-title" style="margin-bottom: 8px;">
+          <span style="font-size: 11px;">排序</span>
+        </div>
+        <n-radio-group
+          :value="sortBy"
+          @update:value="v => $emit('update:sortBy', v)"
+          size="small"
+          style="width: 100%; display: flex;"
         >
-          按时间
-        </button>
+          <n-radio-button value="bot" style="flex: 1; text-align: center;">按机器人</n-radio-button>
+          <n-radio-button value="time" style="flex: 1; text-align: center;">按时间</n-radio-button>
+        </n-radio-group>
       </div>
     </div>
 
-    <div class="divider-line"></div>
-
-    <!-- 统计信息 -->
-    <div class="stats">
-      <div class="stat-item">
-        <span class="stat-value">{{ filteredCount }}</span>
-        <span class="stat-label">当前显示</span>
+    <!-- 分区三：统计 -->
+    <div class="filter-section">
+      <div class="section-title">
+        <span>统计</span>
       </div>
-      <span class="stat-divider">/</span>
-      <div class="stat-item">
-        <span class="stat-value">{{ totalCount }}</span>
-        <span class="stat-label">总任务数</span>
+      <div style="display: flex; gap: 8px;">
+        <div class="stat-card stat-card-blue">
+          <div class="stat-card-num">{{ filteredCount }}</div>
+          <div class="stat-card-label">当前显示</div>
+        </div>
+        <div class="stat-card stat-card-gray">
+          <div class="stat-card-num">{{ totalCount }}</div>
+          <div class="stat-card-label">总任务数</div>
+        </div>
       </div>
     </div>
 
-    <!-- 添加任务按钮 -->
-    <button class="btn btn-primary" @click="$emit('add-task')">
-      <component :is="PlusIcon" class="btn-icon" />
-      添加任务
-    </button>
-  </aside>
+    <!-- 新增任务（大按钮收尾） -->
+    <n-button type="primary" block size="medium" @click="$emit('create')">
+      <template #icon><n-icon><PlusIcon /></n-icon></template>
+      新增任务
+    </n-button>
+  </n-card>
 </template>
 
 <script setup>
-import { ref, watch } from "vue";
+import { h, ref, computed } from 'vue'
 import {
-  Filter as FilterIcon,
-  Search as SearchIcon,
-  RefreshCw as RefreshCwIcon,
-  Bot as BotIcon,
-  ArrowUpDown as ArrowUpDownIcon,
-  Plus as PlusIcon,
-  X as XIcon,
-  Upload as UploadIcon,
-  Download as DownloadIcon,
-  Save as SaveIcon,
-} from "lucide-vue-next";
-import { getBotColor } from "../services/dataService";
+  NCard,
+  NSpace,
+  NButton,
+  NButtonGroup,
+  NInput,
+  NCheckboxGroup,
+  NCheckbox,
+  NRadioGroup,
+  NRadioButton,
+  NIcon,
+  NDropdown,
+} from 'naive-ui'
+import { getBotColor, getHasUnsavedChanges } from '../services/dataService.js'
+
+// 图标组件
+const iconStyle = { width: '14px', height: '14px' }
+const SearchIcon = () =>
+  h(
+    'svg',
+    { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', style: iconStyle },
+    [
+      h('circle', { cx: '11', cy: '11', r: '8' }),
+      h('path', { d: 'm21 21-4.35-4.35' }),
+    ]
+  )
+const ReloadIcon = () =>
+  h(
+    'svg',
+    { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', style: iconStyle },
+    [
+      h('path', { d: 'M3 12a9 9 0 0 1 9-9 9 9 0 0 1 6.5 2.8L21 8' }),
+      h('path', { d: 'M21 3v5h-5' }),
+      h('path', { d: 'M21 12a9 9 0 0 1-9 9 9 9 0 0 1-6.5-2.8L3 16' }),
+      h('path', { d: 'M3 21v-5h5' }),
+    ]
+  )
+const UploadIcon = () =>
+  h(
+    'svg',
+    { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', style: iconStyle },
+    [
+      h('path', { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' }),
+      h('polyline', { points: '17 8 12 3 7 8' }),
+      h('line', { x1: '12', y1: '3', x2: '12', y2: '15' }),
+    ]
+  )
+const DownloadIcon = () =>
+  h(
+    'svg',
+    { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', style: iconStyle },
+    [
+      h('path', { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' }),
+      h('polyline', { points: '7 10 12 15 17 10' }),
+      h('line', { x1: '12', y1: '15', x2: '12', y2: '3' }),
+    ]
+  )
+const SaveIcon = () =>
+  h(
+    'svg',
+    { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', style: iconStyle },
+    [
+      h('path', { d: 'M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z' }),
+      h('polyline', { points: '17 21 17 13 7 13 7 21' }),
+      h('polyline', { points: '7 3 7 8 15 8' }),
+    ]
+  )
+const PlusIcon = () =>
+  h(
+    'svg',
+    { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', style: iconStyle },
+    [
+      h('line', { x1: '12', y1: '5', x2: '12', y2: '19' }),
+      h('line', { x1: '5', y1: '12', x2: '19', y2: '12' }),
+    ]
+  )
 
 const props = defineProps({
-  bots: {
-    type: Array,
-    required: true,
-  },
-  searchTerm: {
-    type: String,
-    default: "",
-  },
-  selectedBots: {
-    type: Array,
-    default: () => [],
-  },
-  sortBy: {
-    type: String,
-    default: "bot",
-  },
-  filteredCount: {
-    type: Number,
-    default: 0,
-  },
-  totalCount: {
-    type: Number,
-    default: 0,
-  },
-});
+  searchTerm: { type: String, default: '' },
+  selectedBots: { type: Array, default: () => [] },
+  sortBy: { type: String, default: 'bot' },
+  allBots: { type: Array, default: () => [] },
+  allTasks: { type: Array, default: () => [] },
+  filteredCount: { type: Number, default: 0 },
+  totalCount: { type: Number, default: 0 },
+})
 
 const emit = defineEmits([
-  "update:searchTerm",
-  "update:selectedBots",
-  "update:sortBy",
-  "refresh",
-  "add-task",
-  "import-file",
-  "export",
-  "save",
-]);
+  'update:searchTerm',
+  'update:selectedBots',
+  'update:sortBy',
+  'refresh',
+  'import',
+  'export',
+  'create',
+  'save',
+])
 
-// 文件输入引用
-const fileInput = ref(null);
+const exportOptions = [
+  { label: '导出为 CSV', key: 'csv' },
+  { label: '导出为 JSON', key: 'json' },
+]
 
-// 本地状态
-const localSearchTerm = ref(props.searchTerm);
-const localSelectedBots = ref([...props.selectedBots]);
-const localSortBy = ref(props.sortBy);
+// 是否有未保存修改（响应式由父组件 totalCount/filteredCount 变化时重新计算保证刷新）
+const hasUnsaved = computed(() => {
+  // 借助 props 变化触发；调用 getHasUnsavedChanges 取当前状态
+  // eslint-disable-next-line no-unused-expressions
+  props.totalCount, props.filteredCount, props.allTasks
+  return getHasUnsavedChanges()
+})
 
-// 监听 props 变化
-watch(
-  () => props.searchTerm,
-  (val) => {
-    localSearchTerm.value = val;
+// 每个机器人任务数（来自 allTasks）
+const botCounts = computed(() => {
+  const map = {}
+  for (const t of props.allTasks) {
+    map[t.bot] = (map[t.bot] || 0) + 1
   }
-);
-watch(
-  () => props.selectedBots,
-  (val) => {
-    localSelectedBots.value = [...val];
+  return map
+})
+
+function selectAllBots() {
+  emit('update:selectedBots', [...props.allBots])
+}
+function clearBots() {
+  emit('update:selectedBots', [])
+}
+
+const fileInputRef = ref(null)
+function triggerImport() {
+  fileInputRef.value?.click()
+}
+function onFileSelected(e) {
+  const file = e.target.files?.[0]
+  if (file) {
+    emit('import', file)
+    e.target.value = ''
   }
-);
-watch(
-  () => props.sortBy,
-  (val) => {
-    localSortBy.value = val;
-  }
-);
-
-// 事件处理
-const handleSearchChange = () => {
-  emit("update:searchTerm", localSearchTerm.value);
-};
-
-const clearSearch = () => {
-  localSearchTerm.value = "";
-  emit("update:searchTerm", "");
-};
-
-const handleBotChange = () => {
-  emit("update:selectedBots", [...localSelectedBots.value]);
-};
-
-const selectAllBots = () => {
-  localSelectedBots.value = [...props.bots];
-  emit("update:selectedBots", [...props.bots]);
-};
-
-const clearAllBots = () => {
-  localSelectedBots.value = [];
-  emit("update:selectedBots", []);
-};
-
-const handleSortChange = (sort) => {
-  localSortBy.value = sort;
-  emit("update:sortBy", sort);
-};
-
-// 文件导入
-const triggerImport = () => {
-  fileInput.value?.click();
-};
-
-const handleFileSelect = (event) => {
-  const file = event.target.files?.[0];
-  if (!file) return;
-
-  // 检测文件格式
-  const format = file.name.endsWith(".json") ? "json" : "csv";
-
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const content = e.target?.result;
-    if (content) {
-      emit("import-file", { content, format });
-    }
-  };
-  reader.readAsText(file);
-
-  // 重置输入以便再次选择同一文件
-  event.target.value = "";
-};
+}
 </script>
 
 <style scoped>
 .filter-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  padding: 24px;
-  height: fit-content;
+  position: sticky;
+  top: 16px;
 }
 
-.panel-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.filter-section {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f5f5f5;
 }
 
-.panel-header h2 {
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.header-icon {
-  width: 24px;
-  height: 24px;
-  color: var(--accent);
-}
-
-.action-group {
-  display: flex;
-  gap: 8px;
-}
-
-.action-group .btn {
-  flex: 1;
-  padding: 8px 10px;
-  font-size: 0.75rem;
-}
-
-.action-group .btn-icon {
-  width: 14px;
-  height: 14px;
-}
-
-.filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.filter-group label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.label-icon {
-  width: 16px;
-  height: 16px;
-}
-
-.search-input-wrapper {
-  position: relative;
-}
-
-.search-input {
-  width: 100%;
-  padding: 10px 36px 10px 14px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  color: var(--text-primary);
-  font-size: 0.875rem;
-  transition: all 0.2s ease;
-}
-
-.search-input:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-glow);
-}
-
-.search-input::placeholder {
-  color: var(--text-muted);
-}
-
-.clear-btn {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.2s ease;
-}
-
-.clear-btn:hover {
-  color: var(--text-primary);
-}
-
-.clear-btn svg {
-  width: 16px;
-  height: 16px;
-}
-
-.bot-checkboxes {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.checkbox-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  padding: 6px 10px;
-  border-radius: 6px;
-  transition: background 0.2s ease;
-}
-
-.checkbox-item:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.checkbox-item input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--bot-color, var(--accent));
-  cursor: pointer;
-}
-
-.checkbox-label {
-  font-size: 0.875rem;
-  color: var(--text-primary);
-}
-
-.bot-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.link-btn {
-  background: none;
-  border: none;
-  color: var(--accent);
-  cursor: pointer;
-  font-size: 0.75rem;
-  padding: 0;
-  transition: color 0.2s ease;
-}
-
-.link-btn:hover {
-  color: var(--accent-light);
-  text-decoration: underline;
-}
-
-.bot-actions .divider {
-  color: var(--text-muted);
-  font-size: 0.75rem;
-}
-
-.sort-options {
-  display: flex;
-  gap: 8px;
-}
-
-.sort-btn {
-  flex: 1;
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.sort-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.sort-btn.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: white;
-}
-
-.divider-line {
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.1),
-    transparent
-  );
-}
-
-.stats {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 12px;
-  background: rgba(139, 92, 246, 0.1);
-  border-radius: 8px;
-}
-
-.stat-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.stat-value {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--accent);
-}
-
-.stat-label {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
-.stat-divider {
-  color: var(--text-muted);
-  font-size: 1.25rem;
-}
-
-.btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 12px 16px;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-icon {
-  width: 18px;
-  height: 18px;
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, var(--accent), #a855f7);
-  color: white;
-  box-shadow: 0 4px 15px var(--accent-glow);
-}
-
-.btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px var(--accent-glow);
-}
-
-.btn-secondary {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--text-primary);
-}
-
-.btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.btn-save {
-  background: linear-gradient(135deg, #10b981, #059669);
-  color: white;
-  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
-}
-
-.btn-save:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+.filter-section:last-of-type {
+  border-bottom: none;
+  padding-bottom: 12px;
 }
 </style>

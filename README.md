@@ -1,29 +1,33 @@
-# PyTaskGantt - 交互式任务甘特图编辑器
+# PyTaskGantt · 交互式任务甘特图编辑器
 
-一个用于可视化自动化任务计划的甘特图仪表盘，提供两种技术栈实现。
+一个用于可视化自动化任务计划的甘特图仪表盘，专为 RPA / 多机器人任务编排场景设计。
 
 ## 📦 版本选择
 
-| 版本 | 目录 | 技术栈 | 特点 |
+| 版本 | 目录 | 技术栈 | 定位 |
 |------|------|--------|------|
-| **Vue 版本** | [vue/](./vue/) | Vue 3 + ECharts + Express | 现代化 UI、粒子背景、深色主题 |
-| **Streamlit 版本** | [streamlit/](./streamlit/) | Python + Streamlit + Plotly | 经典版本、简单部署 |
+| **Vue 版本（首选）** | [vue/](./vue/) | Vue 3 + Naive UI + vis-timeline + Express | AntD 企业风、拖拽编辑、轨道独立行、边缘自动滚动 |
+| Streamlit 版本 | [streamlit/](./streamlit/) | Python + Streamlit + Plotly | 单文件部署、纯 Python 工作流 |
 
 ## 🚀 快速开始
 
-### Vue 版本（推荐）
+### Vue 版本（首选）
 
 ```bash
 cd vue
-
-# 一键启动（双击 start.bat）
-# 或手动启动：
+cp .env.example .env   # 首次运行：拷一份默认配置（端口/CORS）
 npm install
-npm run server  # 终端1: 后端 API
-npm run dev     # 终端2: 前端页面
+npm start              # concurrently 同时拉起后端与前端
 ```
 
-访问: http://localhost:5173
+也可以分别启动：
+
+```bash
+npm run server  # 终端1：Express 后端 API
+npm run dev     # 终端2：Vite 前端
+```
+
+默认端口：后端 `3002`、前端 `5174`。端口、host、CORS、**数据文件路径**均由 `vue/.env` 控制，详见 `vue/.env.example`。把 `TASKS_FILE` 改成绝对路径即可让后端读写任意磁盘位置的 `tasks.json`。
 
 ### Streamlit 版本
 
@@ -33,35 +37,35 @@ pip install streamlit pandas plotly
 streamlit run create_gantt.py
 ```
 
-访问: http://localhost:8501
+访问：http://localhost:8501
 
 ---
 
 ## 📸 效果预览
 
-### Vue 版本
+### Vue 版本（首选）
 
-#### 甘特图主界面
-深色赛博朋克主题，动态粒子背景，玻璃态 UI 设计。
+#### 主界面：甘特图 + 任务列表 + 筛选面板
+AntD 企业风精修：每个任务独占一行的 vis-timeline、配色一致的机器人色块、统计双色卡、未保存红点提示。支持鼠标拖拽改时间，拖到视窗边缘会自动平移并把任务条带走。
 
-![Vue 甘特图](images/vue-task.png)
+![Vue 主界面](images/vue-claude-main.png)
 
-#### 任务编辑
-优雅的模态框设计，表格形式快速编辑。
+#### 任务编辑器
+Modal 表单：任务名、机器人（可输入新机器人 tag）、起止时间（HH:MM:SS），跨天任务自动识别并提示时长。
 
-![Vue 编辑界面](images/vue-edit.png)
+![Vue 编辑器](images/vue-claude-edit.png)
 
 ---
 
 ### Streamlit 版本
 
-#### 编辑界面
+#### 表格编辑界面
 类似 Excel 的表格编辑，实时同步甘特图。
 
 ![Streamlit 编辑界面](images/st-edit.png)
 
-#### 甘特图可视化
-Plotly 驱动的交互式图表，支持缩放和筛选。
+#### Plotly 甘特图
+交互式图表，支持缩放和筛选。
 
 ![Streamlit 甘特图](images/st-task.png)
 
@@ -69,7 +73,7 @@ Plotly 驱动的交互式图表，支持缩放和筛选。
 
 ## 📊 数据格式
 
-两个版本使用相同的 CSV 数据格式：
+两个版本使用相同的 CSV 数据格式（Vue 版本另以 JSON 持久化在 `vue/src/data/tasks.json`）：
 
 ```csv
 Task,Start,Finish,Bot
@@ -82,38 +86,56 @@ Task,Start,Finish,Bot
 | Task | 任务名称 |
 | Start | 开始时间 (HH:MM:SS) |
 | Finish | 结束时间 (HH:MM:SS) |
-| Bot | 机器人/执行者名称 |
+| Bot | 机器人 / 执行者名称 |
+
+跨天任务：若 `Finish < Start`，会被识别为跨越午夜，时长自动按「次日」计算。
 
 ## ✨ 功能对比
 
 | 功能 | Vue 版本 | Streamlit 版本 |
 |------|:--------:|:--------------:|
 | 甘特图可视化 | ✅ | ✅ |
-| 任务编辑 | ✅ | ✅ |
-| 搜索筛选 | ✅ | ✅ |
-| 数据保存 | ✅ | ✅ |
-| CSV导入导出 | ✅ | ✅ |
-| 深色主题 | ✅ | ❌ |
-| 粒子动画 | ✅ | ❌ |
-| 玻璃态UI | ✅ | ❌ |
-| 任务列表视图 | ✅ | ❌ |
+| 鼠标拖拽改时间 | ✅ | ❌ |
+| 拖到边缘自动滚动视窗 | ✅ | ❌ |
+| 任务表单编辑 | ✅ | ✅ |
+| 任务列表表格 | ✅ | ❌ |
+| 搜索 / 多选机器人筛选 | ✅ | ✅ |
+| 排序（按机器人 / 时间） | ✅ | ❌ |
+| 数据保存到磁盘 | ✅ | ✅ |
+| CSV / JSON 导入导出 | ✅ | ✅ |
+| 未保存提示 | ✅ | ❌ |
 
 ## 📁 项目结构
 
 ```
 PyTaskGantt/
-├── README.md              # 项目主文档
-├── ShadowBot_tasks.csv    # 示例数据
-├── images/                # 文档图片
-├── vue/                   # Vue 3 版本
-│   ├── start.bat          # 一键启动
-│   ├── stop.bat           # 停止服务
-│   ├── server.cjs         # 后端 API
-│   └── src/               # 前端源码
-└── streamlit/             # Streamlit 版本
-    ├── create_gantt.py    # 主程序
-    └── ShadowBot_tasks.csv # 数据文件
+├── README.md                  # 项目主文档
+├── ShadowBot_tasks.csv        # 示例 CSV 数据
+├── images/                    # README 截图
+├── vue/                       # Vue 版本（首选）
+│   ├── package.json
+│   ├── .env.example           # 环境变量模板（实际 .env 不入库）
+│   ├── server.cjs             # Express 后端，端口读 .env 中的 PORT
+│   ├── start.bat              # Windows 一键启动
+│   ├── vite.config.js
+│   └── src/
+│       ├── App.vue
+│       ├── main.js
+│       ├── theme.js           # Naive UI AntD 风主题覆盖
+│       ├── style.css
+│       ├── components/        # GanttChart / TaskEditor / TaskList / FilterPanel
+│       ├── services/          # dataService (API + 工具函数)
+│       └── data/tasks.json    # 数据持久化文件
+└── streamlit/
+    ├── create_gantt.py        # 主程序
+    └── ShadowBot_tasks.csv    # 数据文件
 ```
+
+## TODO
+
+- 数据导出为图像
+- 界面美化
+- 数据库支持
 
 ## 📝 License
 

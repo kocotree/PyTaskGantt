@@ -1,7 +1,7 @@
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, time
 
 # --- 页面基础设置 ---
 st.set_page_config(page_title="任务甘特图", layout="wide")
@@ -14,8 +14,27 @@ file_path = "ShadowBot_tasks.csv"
 # --- 常量定义 ---
 # 用于标准化的虚拟日期，确保所有时间都在同一天比较
 DUMMY_DATE = "2025-01-01"
+# 右侧操作面板高度估算参数（基于实测控件渲染高度，用于让左侧表格视觉等高）
+# 这些值是经验估算，目的是让 data_editor 的 height ≈ 右侧 container 实际撑开的高度
+PANEL_BASE_HEIGHT = 440  # 刷新/搜索/排序/divider/新增/保存/caption 等控件总和
+PANEL_CHIP_ROW_HEIGHT = 38  # multiselect 中机器人标签每行高度
+PANEL_PADDING = 32  # container 内边距 + 安全余量
 
 # --- 数据处理函数 ---
+
+
+def normalize_cross_day(df):
+    """
+    将 Finish < Start 的行视为跨天任务，自动给 Finish 加一天。
+    例如 23:00 → 01:00，会被解释为 23:00 → 次日 01:00。
+    """
+    if df.empty:
+        return df
+    mask = df["Finish"] < df["Start"]
+    if mask.any():
+        df = df.copy()
+        df.loc[mask, "Finish"] = df.loc[mask, "Finish"] + pd.Timedelta(days=1)
+    return df
 
 
 @st.cache_data
@@ -50,6 +69,9 @@ def load_data(file_path):
                 f"{DUMMY_DATE} " + temp_dt.dt.strftime("%H:%M:%S"), errors="coerce"
             )
 
+        # 跨天任务处理：Finish < Start 时认为跨天，给 Finish 加一天
+        df = normalize_cross_day(df)
+
         return df
     except FileNotFoundError:
         st.error(f"错误：找不到数据文件 '{file_path}'。请确保文件存在。")
@@ -74,6 +96,77 @@ def save_data(full_df, file_path):
         return True
     except Exception as e:
         return str(e)
+
+
+@st.dialog("➕ 新增任务", width="large")
+def add_task_dialog(all_bots, df_original, file_path):
+    """
+    新增任务的模态对话框：与筛选/编辑器完全解耦。
+    无论主人当前筛选了哪些机器人，都可以独立添加任务（且支持创建新机器人）。
+    """
+    new_task = st.text_input("任务名称", placeholder="例如：登录系统")
+
+    bot_options = all_bots + ["➕ 新建机器人..."] if all_bots else ["➕ 新建机器人..."]
+    bot_choice = st.selectbox("机器人", options=bot_options)
+    new_bot_input = ""
+    if bot_choice == "➕ 新建机器人...":
+        new_bot_input = st.text_input("新机器人名称", placeholder="例如：机器人D")
+
+    col_t1, col_t2 = st.columns(2)
+    with col_t1:
+        new_start = st.time_input("开始时间", value=time(9, 0))
+    with col_t2:
+        new_finish = st.time_input("结束时间", value=time(9, 30))
+    st.caption("ℹ️ 若结束早于开始，将自动视为跨天任务（例如 23:00 → 01:00 = 2 小时）")
+
+    st.divider()
+    col_ok, col_cancel = st.columns(2)
+    with col_ok:
+        confirm = st.button(
+            "✅ 添加任务", type="primary", use_container_width=True
+        )
+    with col_cancel:
+        cancel = st.button("取消", use_container_width=True)
+
+    if cancel:
+        st.rerun()
+
+    if confirm:
+        final_bot = (
+            new_bot_input.strip()
+            if bot_choice == "➕ 新建机器人..."
+            else bot_choice
+        )
+        if not new_task.strip():
+            st.error("❌ 任务名称不能为空")
+            return
+        if not final_bot:
+            st.error("❌ 请选择或输入机器人名称")
+            return
+
+        new_row = pd.DataFrame(
+            [
+                {
+                    "Task": new_task.strip(),
+                    "Start": pd.to_datetime(f"{DUMMY_DATE} {new_start}"),
+                    "Finish": pd.to_datetime(f"{DUMMY_DATE} {new_finish}"),
+                    "Bot": final_bot,
+                }
+            ]
+        )
+        new_row = normalize_cross_day(new_row)
+
+        appended_df = pd.concat([df_original, new_row], ignore_index=True)
+        appended_df = appended_df.sort_values(by=["Bot", "Start"]).reset_index(
+            drop=True
+        )
+        result = save_data(appended_df, file_path)
+        if result is True:
+            st.session_state.data_needs_reload = True
+            st.session_state["_last_added"] = new_task.strip()
+            st.rerun()
+        else:
+            st.error(f"❌ 添加失败: {result}")
 
 
 # --- 主逻辑 ---
@@ -113,8 +206,16 @@ if df_original is not None:
     # 我们可以直接按顺序写。Streamlit 允许即使切出去了再切回来写。
 
     # --- 第一步：渲染筛选控件 (右侧) ---
+    # 用固定高度的容器包住整个右侧操作区，使其与左侧 data_editor 视觉等高
     with col_filter:
         st.subheader("🔍 筛选与操作")
+        # 自适应高度容器：内容自然展开，避免内部滚动
+        filter_container = st.container(border=True)
+
+    with filter_container:
+        # 上次新增成功的反馈（rerun 后展示一次）
+        if "_last_added" in st.session_state:
+            st.success(f"✅ 已添加任务 '{st.session_state.pop('_last_added')}'")
 
         # [新增] 刷新按钮
         if st.button("🔄 刷新数据", use_container_width=True):
@@ -126,7 +227,12 @@ if df_original is not None:
 
         # B. 机器人过滤
         all_bots = sorted(df_original["Bot"].dropna().unique().tolist())
-        selected_bots = st.multiselect("筛选机器人", all_bots, default=all_bots)
+        selected_bots = st.multiselect(
+            "筛选机器人",
+            all_bots,
+            default=all_bots,
+            help="清空表示显示全部机器人",
+        )
 
         # [新增] 排序选项
         sort_option = st.selectbox(
@@ -139,10 +245,9 @@ if df_original is not None:
 
     # --- 第二步：计算筛选结果 ---
     df_filtered = df_original.copy()
+    # 清空 multiselect 视为不筛选机器人（显示全部），符合常规直觉
     if selected_bots:
         df_filtered = df_filtered[df_filtered["Bot"].isin(selected_bots)]
-    else:
-        df_filtered = df_filtered[df_filtered["Bot"].isin([])]
 
     if search_term:
         df_filtered = df_filtered[
@@ -158,6 +263,11 @@ if df_original is not None:
     # --- 第三步：渲染编辑器 (左侧) ---
     with col_editor:
         st.subheader("任务数据编辑")
+        st.caption("💡 新增任务请点右侧『➕ 新增任务』按钮；本编辑器主要用于修改和删除现有任务。")
+        # 估算右侧 panel 实际渲染高度，让 data_editor 与之视觉等高
+        # 注：Streamlit 无法读取另一组件渲染高度，故采用基于机器人数量的经验估算
+        chip_rows = max(1, (len(all_bots) + 2) // 3)
+        editor_height = PANEL_BASE_HEIGHT + chip_rows * PANEL_CHIP_ROW_HEIGHT + PANEL_PADDING
         edited_df = st.data_editor(
             df_filtered,
             num_rows="dynamic",
@@ -169,6 +279,7 @@ if df_original is not None:
                 ),
             },
             use_container_width=True,
+            height=editor_height,
             key="editor",
         )
 
@@ -183,15 +294,23 @@ if df_original is not None:
                         f"{DUMMY_DATE} {str(x).split(' ')[-1]}", errors="coerce"
                     )
                 )
+            # 跨天处理：Finish < Start 视为跨天任务
+            edited_df = normalize_cross_day(edited_df)
         except Exception as e:
             st.warning(f"自动修复日期格式时遇到轻微问题，可能影响显示: {e}")
 
-    # --- 第四步：渲染保存按钮 (回到右侧) ---
-    with col_filter:
+    # --- 第四步：渲染新增任务按钮 + 保存按钮 (回到右侧容器) ---
+    with filter_container:
+        # 新增任务：点击后弹出独立的模态对话框（与筛选/编辑器完全解耦）
+        if st.button(
+            "➕ 新增任务", use_container_width=True, help="弹出新增任务对话框"
+        ):
+            add_task_dialog(all_bots, df_original, file_path)
+
         st.caption(f"当前显示: {len(df_filtered)} / 总数: {len(df_original)}")
 
         # 保存按钮逻辑
-        if st.button("💾 保存更改", type="primary", use_container_width=True):
+        if st.button("💾 保存编辑器修改", type="primary", use_container_width=True):
             # 1. 识别被删除的行
             original_filtered_indices = set(df_filtered.index)
             current_edited_indices = set(edited_df.index)
@@ -208,18 +327,17 @@ if df_original is not None:
             # B. 执行更新和追加
             remaining_indices_to_overwrite = original_filtered_indices - deleted_indices
             new_full_df = new_full_df.drop(index=list(remaining_indices_to_overwrite))
-            new_full_df = pd.concat([new_full_df, edited_df])
+            # ignore_index=True 防止 data_editor 新增行索引与全量数据冲突
+            new_full_df = pd.concat([new_full_df, edited_df], ignore_index=True)
 
-            # 3. 排序
-            new_full_df = new_full_df.sort_values(by=["Bot", "Start"])
+            # 3. 排序 + 重置索引，保证下一轮加载时索引连续
+            new_full_df = new_full_df.sort_values(by=["Bot", "Start"]).reset_index(drop=True)
 
             # 执行保存
             result = save_data(new_full_df, file_path)
             if result is True:
                 st.success("✅ 保存成功！")
                 st.session_state.data_needs_reload = True
-                # 稍微延迟后重载，或者直接依赖下一次交互
-                # st.rerun() 通常需要放在最后，这里直接rerun即可
                 st.rerun()
             else:
                 st.error(f"❌ 保存失败: {result}")

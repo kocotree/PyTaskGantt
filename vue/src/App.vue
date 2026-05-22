@@ -1,412 +1,360 @@
 <template>
-  <div class="app">
-    <!-- 粒子背景 -->
-    <ParticleBackground />
-
-    <!-- 主内容 -->
-    <div class="app-container">
-      <!-- 头部 -->
-      <header class="app-header glass-panel">
-        <div class="header-content">
-          <div class="logo">
-            <component :is="LayoutDashboardIcon" class="logo-icon" />
-            <div class="logo-text">
-              <h1>交互式任务甘特图编辑器</h1>
-            </div>
-          </div>
-          <div class="header-stats">
-            <div class="stat-badge">
-              <component :is="ActivityIcon" class="stat-icon" />
-              <span>{{ filteredTasks.length }} 任务运行中</span>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <!-- 主体布局 -->
-      <main class="app-main">
-        <!-- 左侧主要内容 -->
-        <div class="main-content">
-          <!-- 甘特图区域 -->
-          <section class="chart-section glass-panel">
-            <div class="section-header">
-              <h2>
-                <component :is="BarChart3Icon" class="section-icon" />
-                任务执行甘特图
-              </h2>
-              <span class="time-badge">24小时视图</span>
-            </div>
-            <div class="chart-container">
-              <GanttChart
-                :tasks="filteredTasks"
-                :onTaskClick="handleTaskClick"
-              />
-            </div>
-          </section>
-
-          <!-- 任务列表编辑区 -->
-          <TaskList
-            :tasks="filteredTasks"
-            @edit="handleTaskClick"
-            @delete="handleDeleteTask"
-          />
-        </div>
-
-        <!-- 筛选面板 -->
-        <FilterPanel
-          :bots="allBots"
-          v-model:searchTerm="searchTerm"
-          v-model:selectedBots="selectedBots"
-          v-model:sortBy="sortBy"
-          :filteredCount="filteredTasks.length"
-          :totalCount="allTasks.length"
-          @refresh="handleRefresh"
-          @add-task="openAddModal"
-          @import-file="handleImportFile"
-          @export="handleExport"
-          @save="handleSave"
-        />
-      </main>
-
-      <!-- 底部 -->
-      <footer class="app-footer">
-        <p>Powered by Vue 3 + ECharts | 交互式任务甘特图编辑器 ✨</p>
-      </footer>
-    </div>
-
-    <!-- 任务编辑器 -->
-    <TaskEditor
-      :show="showEditor"
-      :task="editingTask"
-      :bots="allBots"
-      @close="closeEditor"
-      @save="handleSaveTask"
-      @delete="handleDeleteTask"
-    />
-  </div>
+  <n-config-provider :theme-overrides="themeOverrides" :locale="zhCN" :date-locale="dateZhCN">
+    <n-message-provider>
+      <n-dialog-provider>
+        <n-notification-provider>
+          <AppShell />
+        </n-notification-provider>
+      </n-dialog-provider>
+    </n-message-provider>
+  </n-config-provider>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { defineComponent, h, ref, computed, onMounted } from 'vue'
 import {
-  LayoutDashboard as LayoutDashboardIcon,
-  Activity as ActivityIcon,
-  BarChart3 as BarChart3Icon,
-} from "lucide-vue-next";
-import ParticleBackground from "./components/ParticleBackground.vue";
-import GanttChart from "./components/GanttChart.vue";
-import FilterPanel from "./components/FilterPanel.vue";
-import TaskEditor from "./components/TaskEditor.vue";
-import TaskList from "./components/TaskList.vue";
+  NConfigProvider,
+  NMessageProvider,
+  NDialogProvider,
+  NNotificationProvider,
+  NLayout,
+  NLayoutHeader,
+  NLayoutContent,
+  NLayoutFooter,
+  NTag,
+  NSpace,
+  NDivider,
+  NSpin,
+  NEmpty,
+  useMessage,
+  useDialog,
+  zhCN,
+  dateZhCN,
+} from 'naive-ui'
+import { antdLikeTheme } from './theme.js'
+import FilterPanel from './components/FilterPanel.vue'
+import TaskEditor from './components/TaskEditor.vue'
+import TaskList from './components/TaskList.vue'
+import GanttChart from './components/GanttChart.vue'
 import {
+  loadTasksFromServer,
+  saveTasksToServer,
+  importToServer,
+  exportFromServer,
   getAllTasks,
   getAllBots,
   filterTasks,
   addTask,
   updateTask,
   deleteTask,
-  loadTasksFromServer,
-  saveTasksToServer,
-  importToServer,
-  exportFromServer,
-} from "./services/dataService";
+  markAsChanged,
+  markAsSaved,
+  getHasUnsavedChanges,
+} from './services/dataService.js'
 
-// 数据状态
-const allTasks = ref([]);
-const allBots = ref([]);
+const themeOverrides = antdLikeTheme
 
-// 筛选状态
-const searchTerm = ref("");
-const selectedBots = ref([]);
-const sortBy = ref("bot");
+// 主体内容容器组件（放在 provider 内才能使用 useMessage / useDialog）
+const AppShell = defineComponent({
+  components: {
+    FilterPanel,
+    TaskEditor,
+    TaskList,
+    GanttChart,
+    NLayout,
+    NLayoutHeader,
+    NLayoutContent,
+    NLayoutFooter,
+    NTag,
+    NSpace,
+    NDivider,
+    NSpin,
+    NEmpty,
+  },
+  setup() {
+    const message = useMessage()
+    const dialog = useDialog()
 
-// 编辑器状态
-const showEditor = ref(false);
-const editingTask = ref(null);
+    const loading = ref(true)
+    const allTasks = ref([])
+    const allBots = ref([])
 
-// 计算筛选后的任务
-const filteredTasks = computed(() => {
-  return filterTasks(allTasks.value, {
-    searchTerm: searchTerm.value,
-    selectedBots: selectedBots.value,
-    sortBy: sortBy.value,
-  });
-});
+    // 筛选状态
+    const searchTerm = ref('')
+    const selectedBots = ref([])
+    const sortBy = ref('bot')
 
-// 初始化/刷新数据
-const loadData = () => {
-  allTasks.value = getAllTasks();
-  allBots.value = getAllBots();
-  if (selectedBots.value.length === 0) {
-    selectedBots.value = [...allBots.value];
-  }
-};
+    // 编辑器状态
+    const editorVisible = ref(false)
+    const editingTask = ref(null)
+    const editorMode = ref('create') // 'create' | 'edit'
 
-// 从服务器刷新数据
-const handleRefresh = async () => {
-  try {
-    await loadTasksFromServer();
-    loadData();
-  } catch (error) {
-    alert("刷新失败: " + error.message);
-  }
-};
+    // 派生筛选后的任务列表
+    const filteredTasks = computed(() =>
+      filterTasks(allTasks.value, {
+        searchTerm: searchTerm.value,
+        selectedBots: selectedBots.value,
+        sortBy: sortBy.value,
+      })
+    )
 
-// 点击任务
-const handleTaskClick = (task) => {
-  editingTask.value = task;
-  showEditor.value = true;
-};
+    // 刷新内存数据快照
+    function refreshSnapshot() {
+      allTasks.value = getAllTasks()
+      allBots.value = getAllBots()
+    }
 
-// 打开新增弹窗
-const openAddModal = () => {
-  editingTask.value = null;
-  showEditor.value = true;
-};
+    async function loadData(silent = false) {
+      loading.value = true
+      try {
+        await loadTasksFromServer()
+        refreshSnapshot()
+        if (!silent) message.success('数据已刷新')
+      } catch (e) {
+        message.error(`加载失败：${e.message}`)
+      } finally {
+        loading.value = false
+      }
+    }
 
-// 关闭编辑器
-const closeEditor = () => {
-  showEditor.value = false;
-  editingTask.value = null;
-};
+    // 保存
+    async function handleSave() {
+      try {
+        const result = await saveTasksToServer()
+        markAsSaved()
+        message.success(result.message || '保存成功')
+      } catch (e) {
+        message.error(`保存失败：${e.message}`)
+      }
+    }
 
-// 保存任务 (仅内存)
-const handleSaveTask = (taskData) => {
-  if (taskData.id) {
-    updateTask(taskData.id, taskData);
-  } else {
-    addTask(taskData);
-  }
-  loadData();
-};
+    // 导入
+    function handleImport(file) {
+      const reader = new FileReader()
+      reader.onload = async e => {
+        const content = e.target.result
+        const format = file.name.toLowerCase().endsWith('.json') ? 'json' : 'csv'
+        try {
+          const result = await importToServer(content, format)
+          refreshSnapshot()
+          message.success(result.message || '导入成功')
+        } catch (err) {
+          message.error(`导入失败：${err.message}`)
+        }
+      }
+      reader.readAsText(file, 'utf-8')
+    }
 
-// 删除任务 (仅内存)
-const handleDeleteTask = (id) => {
-  deleteTask(id);
-  loadData();
-};
+    function handleExport(format) {
+      exportFromServer(format)
+      message.success(`已导出 ${format.toUpperCase()} 文件`)
+    }
 
-// 导入文件
-const handleImportFile = async ({ content, format }) => {
-  try {
-    const result = await importToServer(content, format);
-    loadData();
-    // 更新机器人筛选列表
-    selectedBots.value = [...getAllBots()];
-    alert(result.message);
-  } catch (error) {
-    alert("导入失败: " + error.message);
-  }
-};
+    // 新增 / 编辑
+    function handleCreate() {
+      editorMode.value = 'create'
+      editingTask.value = {
+        task: '',
+        bot: allBots.value[0] || '',
+        start: '09:00:00',
+        finish: '09:30:00',
+      }
+      editorVisible.value = true
+    }
 
-// 导出文件
-const handleExport = () => {
-  const format = prompt(
-    "选择导出格式:\n1 - CSV\n2 - JSON\n\n(输入 1 或 2)",
-    "1"
-  );
+    function handleEdit(task) {
+      editorMode.value = 'edit'
+      editingTask.value = { ...task }
+      editorVisible.value = true
+    }
 
-  if (format === "1") {
-    exportFromServer("csv");
-  } else if (format === "2") {
-    exportFromServer("json");
-  }
-};
+    function handleEditorSubmit(form) {
+      if (editorMode.value === 'create') {
+        addTask(form)
+      } else {
+        updateTask(form.id, form)
+      }
+      markAsChanged()
+      refreshSnapshot()
+      editorVisible.value = false
+      message.info('已修改（点击「保存」生效到磁盘）')
+    }
 
-// 保存更改到源文件
-const handleSave = async () => {
-  try {
-    const result = await saveTasksToServer();
-    alert(result.message);
-  } catch (error) {
-    alert("保存失败: " + error.message);
-  }
-};
+    function handleEditorDelete(id) {
+      deleteTask(id)
+      markAsChanged()
+      refreshSnapshot()
+      editorVisible.value = false
+      message.info('已删除（点击「保存」生效到磁盘）')
+    }
 
-onMounted(async () => {
-  await loadTasksFromServer();
-  loadData();
-});
+    // 从列表/甘特图发起的删除（无需进编辑器）
+    function handleDelete(task) {
+      dialog.warning({
+        title: '确认删除',
+        content: `确定要删除任务「${task.task}」吗？`,
+        positiveText: '删除',
+        negativeText: '取消',
+        onPositiveClick: () => {
+          deleteTask(task.id)
+          markAsChanged()
+          refreshSnapshot()
+          message.info('已删除（点击「保存」生效到磁盘）')
+        },
+      })
+    }
+
+    // 甘特图拖拽更新时间
+    function handleGanttUpdate({ id, start, finish }) {
+      updateTask(id, { start, finish })
+      markAsChanged()
+      refreshSnapshot()
+    }
+
+    // 离开提示
+    function beforeUnload(e) {
+      if (getHasUnsavedChanges()) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+
+    onMounted(() => {
+      loadData(true)
+      window.addEventListener('beforeunload', beforeUnload)
+    })
+
+    // Logo SVG —— 3 根色条排列的甘特图意象
+    function renderLogoIcon() {
+      return h('span', { class: 'header-logo-icon' }, [
+        h(
+          'svg',
+          { viewBox: '0 0 16 16', fill: 'none', xmlns: 'http://www.w3.org/2000/svg' },
+          [
+            h('rect', { x: '2', y: '3', width: '8', height: '2.2', rx: '1', fill: 'currentColor' }),
+            h('rect', { x: '5', y: '7', width: '9', height: '2.2', rx: '1', fill: 'currentColor', opacity: '0.85' }),
+            h('rect', { x: '3', y: '11', width: '7', height: '2.2', rx: '1', fill: 'currentColor', opacity: '0.7' }),
+          ]
+        ),
+      ])
+    }
+
+    return () =>
+      h(NLayout, { style: 'min-height: 100vh; background: #fafafa;' }, () => [
+        // Header
+        h(
+          NLayoutHeader,
+          {
+            bordered: true,
+            style:
+              'background: #ffffff; padding: 0 24px; height: 60px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 0 rgba(0,0,0,0.03);',
+          },
+          () => [
+            // 左侧 Logo + 标题
+            h('div', { class: 'header-logo' }, [
+              renderLogoIcon(),
+              h('div', { style: 'display: flex; flex-direction: column;' }, [
+                h('span', { class: 'header-title' }, '任务甘特图编辑器'),
+                h('span', { class: 'header-subtitle' }, '可视化任务编排'),
+              ]),
+            ]),
+            // 右侧 状态 + 统计
+            h('div', { class: 'header-stats' }, [
+              getHasUnsavedChanges()
+                ? h('span', { class: 'unsaved-dot' }, '未保存')
+                : null,
+              h('span', null, [
+                '当前显示 ',
+                h('span', { class: 'header-stat-num' }, filteredTasks.value.length),
+                ' / ',
+                h('span', { class: 'header-stat-num' }, allTasks.value.length),
+                ' 条',
+              ]),
+            ]),
+          ]
+        ),
+        // Content
+        h(
+          NLayoutContent,
+          { contentStyle: 'padding: 24px; flex: 1;' },
+          () =>
+            loading.value
+              ? h(
+                  'div',
+                  {
+                    style:
+                      'display:flex; align-items:center; justify-content:center; padding: 80px;',
+                  },
+                  h(NSpin, { size: 'large' })
+                )
+              : h(
+                  'div',
+                  {
+                    style:
+                      'display: grid; grid-template-columns: 1fr 304px; gap: 20px; align-items: start;',
+                  },
+                  [
+                    // 左侧：甘特图 + 任务列表
+                    h(
+                      'div',
+                      {
+                        style: 'display: flex; flex-direction: column; gap: 20px;',
+                      },
+                      [
+                        h(GanttChart, {
+                          tasks: filteredTasks.value,
+                          onTaskClick: handleEdit,
+                          onTaskUpdate: handleGanttUpdate,
+                        }),
+                        h(TaskList, {
+                          tasks: filteredTasks.value,
+                          onEdit: handleEdit,
+                          onDelete: handleDelete,
+                        }),
+                      ]
+                    ),
+                    // 右侧：筛选与操作
+                    h(FilterPanel, {
+                      searchTerm: searchTerm.value,
+                      selectedBots: selectedBots.value,
+                      sortBy: sortBy.value,
+                      allBots: allBots.value,
+                      allTasks: allTasks.value,
+                      filteredCount: filteredTasks.value.length,
+                      totalCount: allTasks.value.length,
+                      'onUpdate:searchTerm': v => (searchTerm.value = v),
+                      'onUpdate:selectedBots': v => (selectedBots.value = v),
+                      'onUpdate:sortBy': v => (sortBy.value = v),
+                      onRefresh: () => loadData(),
+                      onImport: handleImport,
+                      onExport: handleExport,
+                      onCreate: handleCreate,
+                      onSave: handleSave,
+                    }),
+                  ]
+                )
+        ),
+        // Footer
+        h(
+          NLayoutFooter,
+          {
+            bordered: true,
+            style:
+              'background: #ffffff; padding: 12px 24px; text-align: center; color: rgba(0,0,0,0.45); font-size: 12px;',
+          },
+          () => 'PyTaskGantt · Vue 3 + Naive UI + vis-timeline'
+        ),
+        // 编辑器 Modal
+        h(TaskEditor, {
+          show: editorVisible.value,
+          mode: editorMode.value,
+          task: editingTask.value,
+          allBots: allBots.value,
+          'onUpdate:show': v => (editorVisible.value = v),
+          onSubmit: handleEditorSubmit,
+          onDelete: handleEditorDelete,
+        }),
+      ])
+  },
+})
 </script>
-
-<style scoped>
-.app {
-  min-height: 100vh;
-  position: relative;
-}
-
-.app-container {
-  position: relative;
-  z-index: 1;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  padding: 20px;
-  gap: 20px;
-  max-width: 1800px;
-  margin: 0 auto;
-}
-
-/* Header */
-.app-header {
-  padding: 16px 24px;
-}
-
-.header-content {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.logo-icon {
-  width: 40px;
-  height: 40px;
-  color: var(--accent);
-  filter: drop-shadow(0 0 8px var(--accent-glow));
-}
-
-.logo-text h1 {
-  margin: 0;
-  font-size: 1.5rem;
-  font-weight: 700;
-  background: linear-gradient(135deg, var(--accent), #ec4899);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.subtitle {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  letter-spacing: 0.05em;
-}
-
-.header-stats {
-  display: flex;
-  gap: 12px;
-}
-
-.stat-badge {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: rgba(139, 92, 246, 0.1);
-  border: 1px solid rgba(139, 92, 246, 0.2);
-  border-radius: 20px;
-  font-size: 0.875rem;
-  color: var(--accent);
-}
-
-.stat-icon {
-  width: 16px;
-  height: 16px;
-  animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
-/* Main Layout */
-.app-main {
-  flex: 1;
-  display: grid;
-  grid-template-columns: 1fr 300px;
-  gap: 20px;
-}
-
-.main-content {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-/* Chart Section */
-.chart-section {
-  display: flex;
-  flex-direction: column;
-  padding: 24px;
-  overflow: hidden;
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.section-header h2 {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.section-icon {
-  width: 24px;
-  height: 24px;
-  color: var(--accent);
-}
-
-.time-badge {
-  padding: 6px 12px;
-  background: rgba(16, 185, 129, 0.1);
-  border: 1px solid rgba(16, 185, 129, 0.2);
-  border-radius: 14px;
-  font-size: 0.75rem;
-  color: #10b981;
-}
-
-.chart-container {
-  flex: 1;
-  min-height: 500px;
-}
-
-/* Footer */
-.app-footer {
-  text-align: center;
-  padding: 16px;
-  color: var(--text-muted);
-  font-size: 0.875rem;
-}
-
-/* Responsive */
-@media (max-width: 1024px) {
-  .app-main {
-    grid-template-columns: 1fr;
-  }
-
-  .app-main > :last-child {
-    order: -1;
-  }
-}
-
-@media (max-width: 640px) {
-  .header-content {
-    flex-direction: column;
-    gap: 12px;
-    text-align: center;
-  }
-
-  .logo {
-    justify-content: center;
-  }
-}
-</style>
