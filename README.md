@@ -33,11 +33,25 @@ npm run dev     # 终端2：Vite 前端
 
 ```bash
 cd streamlit
-pip install streamlit pandas plotly
-streamlit run create_gantt.py
+copy .env.example .env   # 首次运行：拷一份默认数据源配置
+start.bat   # Windows：uv 一键启动
+```
+
+或手动运行：
+
+```bash
+cd streamlit
+uv run --with streamlit --with pandas --with plotly streamlit run create_gantt.py
 ```
 
 访问：http://localhost:8501
+
+Streamlit 版本的数据文件路径由 `streamlit/.env` 的 `TASKS_FILE` 控制；相对路径以 `streamlit/` 目录为基准，也支持绝对路径。例如：
+
+```env
+TASKS_FILE=../ShadowBot_tasks.csv
+TASKS_FILE=D:/data/tasks.csv
+```
 
 ---
 
@@ -127,6 +141,8 @@ PyTaskGantt/
 │       ├── services/          # dataService (API + 工具函数)
 │       └── data/tasks.json    # 数据持久化文件
 └── streamlit/
+    ├── .env.example           # Streamlit 数据源配置模板
+    ├── start.bat              # Windows uv 一键启动
     ├── create_gantt.py        # 主程序
     └── ShadowBot_tasks.csv    # 数据文件
 ```

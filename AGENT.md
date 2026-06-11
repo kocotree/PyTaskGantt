@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENT.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to coding agents when working with code in this repository.
 
 ## 仓库结构概览
 
@@ -48,7 +48,7 @@ uv run --with streamlit --with pandas --with plotly streamlit run create_gantt.p
 
 `vue/.env`（不入库，从 `.env.example` 复制）控制所有运行时配置：
 
-- `PORT` — Express 后端端口；同时通过 Vite 的 `define` 在构建期把 `import.meta.env.VITE_API_PORT` 替换为这个值
+- `PORT` — Express 后端端口；前端会同步用这个端口拼 API 地址
 - `VITE_DEV_PORT` / `VITE_DEV_HOST` — Vite dev server
 - `CORS_ORIGIN` — 后端 CORS 白名单，`*` 或逗号分隔域名
 - `TASKS_FILE` — 任务数据文件路径，**扩展名决定读写格式**：`.csv` 走 CSV 解析，其它一律当 JSON。可填相对路径（基准为 `vue/`）或绝对路径，例如 `Z:\…\ShadowBot_tasks.csv`。后端启动日志会打印实际格式标记。
@@ -76,4 +76,4 @@ uv run --with streamlit --with pandas --with plotly streamlit run create_gantt.p
 
 - 不要把 `.env`、`dist/`、`node_modules/` 入库（已在 `.gitignore`）。
 - `src/data/tasks.json` 是默认示例数据，会被前端在后端不可达时作为兜底加载；不要随手 commit 本地测试时被覆盖的版本。
-- **未经用户明确要求，不要执行 `git commit` 或分支操作**（继承自全局 CLAUDE.md 的硬约束）。
+- 未经用户明确要求，不要执行 `git commit` 或分支操作。

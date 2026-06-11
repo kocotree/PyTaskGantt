@@ -1,24 +1,72 @@
+import os
+from pathlib import Path
+
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from datetime import datetime, time
+from datetime import time
 
 # --- 页面基础设置 ---
 st.set_page_config(page_title="任务甘特图", layout="wide")
 
 st.title("自动化任务图 - 交互式编辑器")
 
-# --- 数据文件路径 ---
-file_path = "ShadowBot_tasks.csv"
-
 # --- 常量定义 ---
 # 用于标准化的虚拟日期，确保所有时间都在同一天比较
 DUMMY_DATE = "2025-01-01"
+DEFAULT_TASKS_FILE = "ShadowBot_tasks.csv"
+SCRIPT_DIR = Path(__file__).resolve().parent
 # 右侧操作面板高度估算参数（基于实测控件渲染高度，用于让左侧表格视觉等高）
 # 这些值是经验估算，目的是让 data_editor 的 height ≈ 右侧 container 实际撑开的高度
 PANEL_BASE_HEIGHT = 440  # 刷新/搜索/排序/divider/新增/保存/caption 等控件总和
 PANEL_CHIP_ROW_HEIGHT = 38  # multiselect 中机器人标签每行高度
 PANEL_PADDING = 32  # container 内边距 + 安全余量
+
+# --- 数据文件路径 ---
+
+
+def read_dotenv_value(key):
+    """
+    从 streamlit/.env 读取指定配置项。
+    只支持本项目需要的 KEY=VALUE 形式，避免引入额外依赖。
+    """
+    env_path = SCRIPT_DIR / ".env"
+    if not env_path.exists():
+        return None
+
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        name, value = line.split("=", 1)
+        if name.strip() == key:
+            return value.strip().strip('"').strip("'")
+
+    return None
+
+
+def resolve_tasks_file_path():
+    """
+    数据源优先级：
+    1. 系统环境变量 TASKS_FILE
+    2. streamlit/.env 中的 TASKS_FILE
+    3. 默认 ShadowBot_tasks.csv
+    """
+    configured_path = (
+        os.environ.get("TASKS_FILE")
+        or read_dotenv_value("TASKS_FILE")
+        or DEFAULT_TASKS_FILE
+    )
+    configured_path = configured_path.strip()
+    tasks_path = Path(configured_path).expanduser()
+    if not tasks_path.is_absolute():
+        tasks_path = SCRIPT_DIR / tasks_path
+    return tasks_path.resolve()
+
+
+file_path = resolve_tasks_file_path()
+st.caption(f"数据文件: {file_path}")
 
 # --- 数据处理函数 ---
 
@@ -74,7 +122,7 @@ def load_data(file_path):
 
         return df
     except FileNotFoundError:
-        st.error(f"错误：找不到数据文件 '{file_path}'。请确保文件存在。")
+        st.error(f"错误：找不到当前配置的数据文件 '{file_path}'。请确保文件存在。")
         return None
     except Exception as e:
         st.error(f"读取数据时发生错误: {e}")
