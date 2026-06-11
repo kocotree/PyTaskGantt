@@ -17,6 +17,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 .venv/
+.uv-cache/
 venv/
 *.egg-info/
 

@@ -37,14 +37,7 @@ copy .env.example .env   # 首次运行：拷一份默认数据源配置
 start.bat   # Windows：uv 一键启动
 ```
 
-或手动运行：
-
-```bash
-cd streamlit
-uv run --with streamlit --with pandas --with plotly streamlit run create_gantt.py
-```
-
-访问：http://localhost:8501
+`start.bat` 会在 `streamlit/.venv` 创建本地 Python 环境，并把 uv 下载缓存放到 `streamlit/.uv-cache`。访问：http://localhost:8501
 
 Streamlit 版本的数据文件路径由 `streamlit/.env` 的 `TASKS_FILE` 控制；相对路径以 `streamlit/` 目录为基准，也支持绝对路径。例如：
 

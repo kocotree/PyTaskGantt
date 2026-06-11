@@ -29,8 +29,9 @@ npm run build          # 产物在 dist/
 ```bash
 copy .env.example .env    # 首次：拷一份默认数据源配置
 start.bat    # Windows：uv 一键启动，http://localhost:8501
-uv run --with streamlit --with pandas --with plotly streamlit run create_gantt.py
 ```
+
+`start.bat` 会在 `streamlit/.venv` 创建本地 Python 环境，并把 uv 下载缓存放到 `streamlit/.uv-cache`。
 
 仓库没有测试、lint、format 配置——不要假定 `npm test` 或 `npm run lint` 存在。
 
