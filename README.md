@@ -37,7 +37,7 @@ copy .env.example .env   # 首次运行：拷一份默认数据源配置
 start.bat   # Windows：uv 一键启动
 ```
 
-`start.bat` 会在 `streamlit/.venv` 创建本地 Python 环境，并把 uv 下载缓存放到 `streamlit/.uv-cache`。访问：http://localhost:8501
+`start.bat` 会用 Python 3.12 在 `streamlit/.venv` 创建本地环境，并把 uv 下载缓存放到 `streamlit/.uv-cache`；如果已有 `.venv` 不是 Python 3.12，会自动重建。实际启动时会切到系统临时目录运行 Streamlit，再用绝对路径加载 `create_gantt.py`，避免网络盘目录影响 NumPy/Pandas 导入。访问：http://localhost:8501
 
 Streamlit 版本的数据文件路径由 `streamlit/.env` 的 `TASKS_FILE` 控制；相对路径以 `streamlit/` 目录为基准，也支持绝对路径。例如：
 
