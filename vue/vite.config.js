@@ -15,6 +15,9 @@ export default defineConfig(({ mode }) => {
     server: {
       port: devPort,
       host: devHost,
+      watch: {
+        usePolling: true,
+      },
     },
     // 把后端端口暴露给前端代码（编译期字符串替换）
     define: {
