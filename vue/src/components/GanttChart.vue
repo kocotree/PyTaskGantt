@@ -597,4 +597,13 @@ onBeforeUnmount(() => {
 .vis-foreground .vis-group {
   border-bottom: 1px solid #fafafa;
 }
+/* 任务条垂直居中：
+   stack:false 时 vis 把每个任务条钉在 top = margin.item.vertical(4px)，而行高(31px)由更高的
+   左侧标签撑起，导致任务条偏上、底部留白(4px/7px)。
+   item 的 top 相对其所属 .vis-group 容器（高度=行高），用 50% 取行中线，再减去任务条自身高度的一半
+   (固定 20px → 10px) 上移回正，实现与网格行居中。!important 覆盖 vis 写入的内联 top。
+   （不用 translateY(-50%)：vis-item 上的 transform 会被内部样式覆盖而失效。） */
+.vis-foreground .vis-item.vis-range {
+  top: calc(50% - 10px) !important;
+}
 </style>
