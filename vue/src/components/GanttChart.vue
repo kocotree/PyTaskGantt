@@ -273,14 +273,11 @@ function buildItems(tasks) {
   })
 }
 
-// 任务 → vis-timeline groups（每个任务一行，按 bot+start 排序，label 显示任务名 + 机器人色块）
+// 任务 → vis-timeline groups（每个任务一行，label 显示任务名 + 机器人色块）
+// 行序直接沿用父组件传入的 tasks 顺序——排序的唯一事实源是 App.vue 的 filterTasks(sortBy)。
+// 不在这里二次排序，否则「按时间 / 按机器人」切换对甘特图不生效。
 function buildGroups(tasks) {
-  const sorted = [...tasks].sort((a, b) => {
-    const botCmp = a.bot.localeCompare(b.bot)
-    if (botCmp !== 0) return botCmp
-    return a.start.localeCompare(b.start)
-  })
-  return sorted.map((t, idx) => ({
+  return tasks.map((t, idx) => ({
     id: t.id,
     order: idx, // 配合 timeline option `groupOrder: 'order'` 控制行序
     // 左侧轨道标签：色块 + 任务名 + 机器人名
