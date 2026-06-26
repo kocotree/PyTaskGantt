@@ -313,8 +313,8 @@ const AppShell = defineComponent({
                         }),
                       ]
                     ),
-                    // 右侧：筛选与操作
-                    h(FilterPanel, {
+                    // 右侧：筛选与操作（sticky 固定 + 视口垂直居中，不随页面滚动）
+                    h('div', { class: 'filter-col' }, h(FilterPanel, {
                       searchTerm: searchTerm.value,
                       selectedBots: selectedBots.value,
                       sortBy: sortBy.value,
@@ -330,7 +330,7 @@ const AppShell = defineComponent({
                       onExport: handleExport,
                       onCreate: handleCreate,
                       onSave: handleSave,
-                    }),
+                    })),
                   ]
                 )
         ),
@@ -358,3 +358,20 @@ const AppShell = defineComponent({
   },
 })
 </script>
+
+<style>
+/* 右侧筛选面板：fixed 固定 + 视口垂直居中，始终可见、完全不随页面上下滚动而移动。
+   （sticky 在页面顶部时不会主动把元素拉到中线，无法做到「任何滚动位置都居中」，故用 fixed。）
+   面板被移出文档流，但 grid 第二列是显式的 304px 轨道，空间依然保留，左侧内容布局不受影响。
+   right:24px 对齐 NLayoutContent 的 24px 内边距，width:304px 与轨道同宽，水平位置与原先一致。
+   max-height + overflow 兜底：视口比面板矮时占满高度并内部滚动，避免内容被裁切。 */
+.filter-col {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  right: 24px;
+  width: 304px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+</style>
