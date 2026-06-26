@@ -89,12 +89,16 @@ export async function loadTasksFromServer() {
     if (!response.ok) throw new Error('加载失败')
     tasksData = await response.json()
     botColorCache.clear()
+    // 从服务器载入的就是磁盘上的「已保存」真相，清掉未保存标记。
+    // 这样「刷新」可丢弃本地拖拽/编辑的待保存改动并复位「待保存」徽标。
+    markAsSaved()
     return tasksData
   } catch (error) {
     console.error('从服务器加载数据失败:', error)
     const defaultData = await import('../data/tasks.json')
     tasksData = defaultData.default || []
     botColorCache.clear()
+    markAsSaved()
     return tasksData
   }
 }
