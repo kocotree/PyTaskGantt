@@ -14,7 +14,7 @@ if exist .env (
 
 echo.
 echo ╔══════════════════════════════════════════════════════════╗
-echo ║   任务甘特图编辑器 (AntD 企业风) - 一键启动               ║
+echo ║   任务甘特图编辑器 - 一键启动               ║
 echo ╠══════════════════════════════════════════════════════════╣
 echo ║  后端 API:  http://localhost:%BACKEND_PORT%
 echo ║  前端页面:  http://localhost:%FRONTEND_PORT%
