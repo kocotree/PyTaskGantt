@@ -24,6 +24,8 @@ npm run dev            # 仅启动前端 (Vite, 默认 :5174)
 npm run build          # 产物在 dist/
 ```
 
+> **测试服务收尾约定**：为验证改动而启动的本地服务（`npm start` / `npm run dev` / `npm run server` 的 Vite/Express，或 Streamlit），测试完成后必须主动停掉以释放端口（默认 `:5174` / `:3002` / `:8501`），不要把进程留在后台。Windows 下可用 `netstat -ano | findstr :5174` 找到 PID 后 `taskkill /PID <pid> /F`。
+
 ### Streamlit 版本（在 `streamlit/` 目录下）
 
 ```bash
