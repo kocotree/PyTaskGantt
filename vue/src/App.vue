@@ -122,6 +122,9 @@ const AppShell = defineComponent({
       try {
         const result = await saveTasksToServer()
         markAsSaved()
+        // 保存本身不改内存数据，但要刷新快照以触发重渲染，
+        // 让 header / FilterPanel 的「未保存」指示器读到最新状态
+        refreshSnapshot()
         message.success(result.message || '保存成功')
       } catch (e) {
         message.error(`保存失败：${e.message}`)
