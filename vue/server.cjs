@@ -7,20 +7,12 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
+const storage = require('./storage/index.cjs');
+const { parseCSV, tasksToCSV } = require('./lib/csv.cjs');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3002;
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
-
-// 数据文件路径（来自 .env 的 TASKS_FILE，相对路径以本目录为基准）
-// 扩展名决定读写格式：.csv → CSV，其它一律按 JSON 处理
-const TASKS_FILE_ENV = process.env.TASKS_FILE || 'src/data/tasks.json';
-const TASKS_FILE_PATH = path.isAbsolute(TASKS_FILE_ENV)
-  ? TASKS_FILE_ENV
-  : path.resolve(__dirname, TASKS_FILE_ENV);
-const DATA_DIR = path.dirname(TASKS_FILE_PATH);
-const TASKS_FORMAT = TASKS_FILE_PATH.toLowerCase().endsWith('.csv') ? 'csv' : 'json';
 
 // 中间件 - CORS 配置（允许局域网跨域访问）
 app.use(cors({
@@ -30,98 +22,14 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 
-// 确保数据目录存在
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-
-/**
- * 解析 CSV 内容为任务数组
- */
-function parseCSV(csvContent) {
-  const lines = csvContent.trim().split(/\r?\n/);
-  if (lines.length < 2) {
-    throw new Error('CSV 文件内容不足');
-  }
-
-  const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-  const requiredColumns = ['task', 'start', 'finish', 'bot'];
-  const columnMap = {};
-
-  requiredColumns.forEach(col => {
-    const index = headers.findIndex(h => h === col);
-    if (index === -1) {
-      throw new Error(`CSV 缺少必要的列: ${col}`);
-    }
-    columnMap[col] = index;
-  });
-
-  const tasks = [];
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-
-    const values = line.split(',').map(v => v.trim());
-
-    // 标准化时间
-    const normalizeTime = (timeStr) => {
-      if (!timeStr) return '00:00:00';
-      const parts = timeStr.trim().split(' ');
-      const timePart = parts[parts.length - 1];
-      const timeSegments = timePart.split(':');
-      while (timeSegments.length < 3) {
-        timeSegments.push('00');
-      }
-      return timeSegments.slice(0, 3).join(':');
-    };
-
-    const task = {
-      id: i,
-      task: values[columnMap['task']] || '',
-      start: normalizeTime(values[columnMap['start']]),
-      finish: normalizeTime(values[columnMap['finish']]),
-      bot: values[columnMap['bot']] || '未分类'
-    };
-
-    if (task.task) {
-      tasks.push(task);
-    }
-  }
-
-  return tasks;
-}
-
-/**
- * 将任务数组转换为 CSV 字符串
- */
-function tasksToCSV(tasks) {
-  const headers = ['Task', 'Start', 'Finish', 'Bot'];
-  const rows = tasks.map(t => [t.task, t.start, t.finish, t.bot].join(','));
-  return [headers.join(','), ...rows].join('\n');
-}
-
-// 按 TASKS_FORMAT 读 / 写源文件，统一封装供各路由调用
-function readTasksFile() {
-  if (!fs.existsSync(TASKS_FILE_PATH)) return [];
-  const content = fs.readFileSync(TASKS_FILE_PATH, 'utf-8');
-  return TASKS_FORMAT === 'csv' ? parseCSV(content) : JSON.parse(content);
-}
-
-function writeTasksFile(tasks) {
-  const content = TASKS_FORMAT === 'csv'
-    ? tasksToCSV(tasks)
-    : JSON.stringify(tasks, null, 2);
-  fs.writeFileSync(TASKS_FILE_PATH, content, 'utf-8');
-}
-
 // ============== API 路由 ==============
 
 /**
  * GET /api/tasks - 获取任务数据
  */
-app.get('/api/tasks', (req, res) => {
+app.get('/api/tasks', async (req, res) => {
   try {
-    res.json(readTasksFile());
+    res.json(await storage.readTasks());
   } catch (error) {
     console.error('读取任务数据失败:', error);
     res.status(500).json({ error: '读取数据失败', message: error.message });
@@ -131,7 +39,7 @@ app.get('/api/tasks', (req, res) => {
 /**
  * POST /api/tasks - 保存任务数据到源文件
  */
-app.post('/api/tasks', (req, res) => {
+app.post('/api/tasks', async (req, res) => {
   try {
     const tasks = req.body;
 
@@ -147,11 +55,16 @@ app.post('/api/tasks', (req, res) => {
       bot: t.bot
     }));
 
-    writeTasksFile(cleanTasks);
+    const stat = await storage.saveTasks(cleanTasks);
+
+    // pg 增量保存会回报逐行差异；file 整文件重写只有总数
+    const message = stat && Number.isInteger(stat.updated)
+      ? `已保存：新增 ${stat.inserted}、修改 ${stat.updated}、删除 ${stat.deleted}`
+      : `成功保存 ${cleanTasks.length} 条任务`;
 
     res.json({
       success: true,
-      message: `成功保存 ${cleanTasks.length} 条任务`,
+      message,
       count: cleanTasks.length
     });
   } catch (error) {
@@ -163,7 +76,7 @@ app.post('/api/tasks', (req, res) => {
 /**
  * POST /api/import - 导入 CSV 或 JSON 文件
  */
-app.post('/api/import', (req, res) => {
+app.post('/api/import', async (req, res) => {
   try {
     const { content, format } = req.body;
 
@@ -189,7 +102,7 @@ app.post('/api/import', (req, res) => {
       tasks = parseCSV(content);
     }
 
-    writeTasksFile(tasks);
+    await storage.replaceTasks(tasks);
 
     res.json({
       success: true,
@@ -205,15 +118,11 @@ app.post('/api/import', (req, res) => {
 /**
  * GET /api/export/:format - 导出数据文件
  */
-app.get('/api/export/:format', (req, res) => {
+app.get('/api/export/:format', async (req, res) => {
   try {
     const { format } = req.params;
 
-    if (!fs.existsSync(TASKS_FILE_PATH)) {
-      return res.status(404).json({ error: '没有数据可导出' });
-    }
-
-    const tasks = readTasksFile();
+    const tasks = await storage.readTasks();
 
     if (format === 'csv') {
       const csvContent = tasksToCSV(tasks);
@@ -232,14 +141,29 @@ app.get('/api/export/:format', (req, res) => {
 });
 
 // 启动服务器 (0.0.0.0 允许局域网访问)
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n✨ 后端 API 服务器已启动`);
-  console.log(`📍 地址: http://localhost:${PORT}`);
-  console.log(`📍 局域网: http://0.0.0.0:${PORT}`);
-  console.log(`📁 数据文件: ${TASKS_FILE_PATH} (${TASKS_FORMAT.toUpperCase()})`);
-  console.log(`\n可用接口:`);
-  console.log(`  GET  /api/tasks        - 获取任务数据`);
-  console.log(`  POST /api/tasks        - 保存任务数据`);
-  console.log(`  POST /api/import       - 导入数据文件`);
-  console.log(`  GET  /api/export/:fmt  - 导出数据 (csv/json)\n`);
-});
+(async () => {
+  try {
+    await storage.initStorage();
+  } catch (error) {
+    // AggregateError（如 localhost 同时解析 ::1/127.0.0.1）的 message 可能为空，
+    // 真正原因在 error.errors 里，逐条取出避免打印空信息
+    const detail = error.message
+      || (error.errors && error.errors.map(e => e.message).join('; '))
+      || String(error);
+    console.error(`\n❌ 存储后端初始化失败 (STORAGE_DRIVER=${storage.driver}):`);
+    console.error(`   ${detail}\n`);
+    process.exit(1);
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n✨ 后端 API 服务器已启动`);
+    console.log(`📍 地址: http://localhost:${PORT}`);
+    console.log(`📍 局域网: http://0.0.0.0:${PORT}`);
+    console.log(`💾 存储后端: ${storage.describe()}`);
+    console.log(`\n可用接口:`);
+    console.log(`  GET  /api/tasks        - 获取任务数据`);
+    console.log(`  POST /api/tasks        - 保存任务数据`);
+    console.log(`  POST /api/import       - 导入数据文件`);
+    console.log(`  GET  /api/export/:fmt  - 导出数据 (csv/json)\n`);
+  });
+})();
