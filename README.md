@@ -1,23 +1,14 @@
 # PyTaskGantt · 交互式任务甘特图编辑器
 
-一个用于可视化自动化任务计划的甘特图仪表盘，专为 RPA / 多机器人任务编排场景设计。
-
-## 📦 版本选择
-
-| 版本 | 目录 | 技术栈 | 定位 |
-|------|------|--------|------|
-| **Vue 版本（首选）** | [vue/](./vue/) | Vue 3 + Naive UI + vis-timeline + Express | AntD 企业风、拖拽编辑、轨道独立行、边缘自动滚动 |
-| Streamlit 版本 | [streamlit/](./streamlit/) | Python + Streamlit + Plotly | 单文件部署、纯 Python 工作流 |
+面向 RPA / 多机器人任务编排场景的可视化甘特图仪表盘，支持拖拽编辑、筛选排序、CSV/JSON 导入导出、PostgreSQL 持久化。
 
 ## 🚀 快速开始
 
-### Vue 版本（首选）
-
 ```bash
 cd vue
-cp .env.example .env   # 首次运行：拷一份默认配置（端口/CORS）
+cp .env.example .env   # 首次运行：复制默认配置（端口/CORS/存储驱动）
 npm install
-npm start              # concurrently 同时拉起后端与前端
+npm start              # concurrently 同时拉起 Express 后端 + Vite 前端
 ```
 
 也可以分别启动：
@@ -27,60 +18,51 @@ npm run server  # 终端1：Express 后端 API
 npm run dev     # 终端2：Vite 前端
 ```
 
-默认端口：后端 `3002`、前端 `5174`。端口、host、CORS、**数据文件路径**均由 `vue/.env` 控制，详见 `vue/.env.example`。把 `TASKS_FILE` 改成绝对路径即可让后端读写任意磁盘位置的 `tasks.json`。
+**默认端口**：后端 `3002`、前端 `5174`，由 `vue/.env` 控制。首次运行执行 `cp .env.example .env` 即可，不需额外配置。
 
-### Streamlit 版本
+| 环境变量 | 说明 | 默认值 |
+|:---|:---|:---|
+| `PORT` | Express 端口 | `3002` |
+| `CORS_ORIGIN` | 跨域白名单 | `*` |
+| `STORAGE_DRIVER` | 存储后端：`file` / `postgres` | `file` |
+| `TASKS_FILE` | 文件存储路径（相对路径以 `vue/` 为基准） | `src/data/tasks.json` |
+| `VITE_DEV_PORT` | Vite 端口 | `5174` |
 
-```bash
-cd streamlit
-copy .env.example .env   # 首次运行：拷一份默认数据源配置
-start.bat   # Windows：uv 一键启动
-```
-
-`start.bat` 会用 Python 3.12 在 `streamlit/.venv` 创建本地环境，并把 uv 下载缓存放到 `streamlit/.uv-cache`；如果已有 `.venv` 不是 Python 3.12，会自动重建。实际启动时会切到系统临时目录运行 Streamlit，再用绝对路径加载 `create_gantt.py`，避免网络盘目录影响 NumPy/Pandas 导入。访问：http://localhost:8501
-
-Streamlit 版本的数据文件路径由 `streamlit/.env` 的 `TASKS_FILE` 控制；相对路径以 `streamlit/` 目录为基准，也支持绝对路径。例如：
-
-```env
-TASKS_FILE=../ShadowBot_tasks.csv
-TASKS_FILE=D:/data/tasks.csv
-```
+**PostgreSQL 支持**：设 `STORAGE_DRIVER=postgres` 即可切换至数据库存储，详见 [vue/POSTGRESQL.md](vue/POSTGRESQL.md)。
 
 ---
 
 ## 📸 效果预览
 
-### Vue 版本（首选）
+### 主界面：甘特图 + 任务列表 + 操作面板
 
-#### 主界面：甘特图 + 任务列表 + 筛选面板
-AntD 企业风精修：每个任务独占一行的 vis-timeline、配色一致的机器人色块、统计双色卡、未保存红点提示。支持鼠标拖拽改时间，拖到视窗边缘会自动平移并把任务条带走。
+上栏甘特图区：每个任务独占一行的 vis-timeline 时间条，配色按机器人稳定分配，支持鼠标拖拽改时间（拖到视窗边缘自动平移）；下栏任务列表：表格展示任务名、起止时间、机器人（彩色标签）、时长、跨天标记（"次日"），支持分页；右侧固定面板：数据刷新 / 导入导出 / 保存、搜索筛选、多选机器人过滤、排序切换。
 
-![Vue 主界面](images/vue-claude-main.png)
+![Vue 主界面](images/vue-main.png)
 
-#### 任务编辑器
-Modal 表单：任务名、机器人（可输入新机器人 tag）、起止时间（HH:MM:SS），跨天任务自动识别并提示时长。
+### 任务编辑器
 
-![Vue 编辑器](images/vue-claude-edit.png)
+Modal 表单编辑：任务名（最长 100 字）、机器人（下拉选择或输入新标签，自动补全颜色）、起止时间（HH:MM:SS 时间选择器，支持"此刻"快捷按钮）。跨天任务（`finish < start`）自动识别并以橙色提示条展示时长。编辑完成后点「保存编辑器修改」将修改持久化至磁盘或 PostgreSQL。
 
----
+![任务编辑器](images/vue-edit.png)
 
-### Streamlit 版本
+### 筛选与搜索
 
-#### 表格编辑界面
-类似 Excel 的表格编辑，实时同步甘特图。
+支持任务名模糊搜索、多选机器人筛选、三种排序方式（按机器人名 / 开始时间 / 结束时间）。筛选后甘特图与任务列表同步更新，无匹配时显示空状态提示。
 
-![Streamlit 编辑界面](images/st-edit.png)
+![筛选功能](images/vue-filter.png)
 
-#### Plotly 甘特图
-交互式图表，支持缩放和筛选。
+### 拖拽编辑时间
 
-![Streamlit 甘特图](images/st-task.png)
+在甘特图上按住任务条左右拖拽即可调整起止时间。拖拽过程中显示浮动 tooltip（任务名、机器人色块、起止时间、时长），拖到视窗边缘自动平移画布，松手后立即反映到任务列表，未保存红点提示。
+
+![拖拽编辑](images/vue-drag.png)
 
 ---
 
 ## 📊 数据格式
 
-两个版本使用相同的 CSV 数据格式（Vue 版本另以 JSON 持久化在 `vue/src/data/tasks.json`）：
+支持 CSV 导入导出，默认以 JSON 持久化到 `vue/src/data/tasks.json`：
 
 ```csv
 Task,Start,Finish,Bot
@@ -88,63 +70,67 @@ Task,Start,Finish,Bot
 日志分析#1,10:00:00,10:30:00,机器人B
 ```
 
-| 字段 | 说明 |
-|------|------|
-| Task | 任务名称 |
-| Start | 开始时间 (HH:MM:SS) |
-| Finish | 结束时间 (HH:MM:SS) |
-| Bot | 机器人 / 执行者名称 |
+| 字段 | 格式 | 说明 |
+|:---|:---|:---|
+| Task | 文本 | 任务名称 |
+| Start | HH:MM:SS | 开始时间 |
+| Finish | HH:MM:SS | 结束时间 |
+| Bot | 文本 | 机器人 / 执行者名称 |
 
-跨天任务：若 `Finish < Start`，会被识别为跨越午夜，时长自动按「次日」计算。
+**跨天任务**：若 `Finish < Start`（字符串比较），识别为跨越午夜，时长自动按次日计算。
 
-## ✨ 功能对比
+---
 
-| 功能 | Vue 版本 | Streamlit 版本 |
-|------|:--------:|:--------------:|
-| 甘特图可视化 | ✅ | ✅ |
-| 鼠标拖拽改时间 | ✅ | ❌ |
-| 拖到边缘自动滚动视窗 | ✅ | ❌ |
-| 任务表单编辑 | ✅ | ✅ |
-| 任务列表表格 | ✅ | ❌ |
-| 搜索 / 多选机器人筛选 | ✅ | ✅ |
-| 排序（按机器人 / 时间） | ✅ | ❌ |
-| 数据保存到磁盘 | ✅ | ✅ |
-| CSV / JSON 导入导出 | ✅ | ✅ |
-| 未保存提示 | ✅ | ❌ |
+## ✨ 功能一览
+
+| 功能 | 说明 |
+|:---|:---|
+| 甘特图可视化 | vis-timeline 渲染，每个任务独占一行，配色按机器人稳定分配 |
+| 鼠标拖拽改时间 | 甘特图时间条左右拖拽调整起止时间 |
+| 拖到边缘自动滚动 | 拖拽接近视窗边缘时画布自动平移，任务条跟随 |
+| 任务编辑器 | Modal 表单：任务名、机器人（含新标签输入）、起止时间选择器 |
+| 任务列表 | 表格展示：名称、起止时间、机器人标签、时长、跨天标记，分页 |
+| 搜索筛选 | 任务名模糊搜索 + 多选机器人过滤 |
+| 排序 | 按机器人名 / 开始时间 / 结束时间 |
+| CSV/JSON 导入导出 | 前端选择文件导入，一键导出为 CSV 或 JSON |
+| 数据持久化 | 支持 JSON 文件存储和 PostgreSQL 两种后端 |
+| 未保存提示 | Header 红点 + 保存按钮状态变化 |
+
+---
 
 ## 📁 项目结构
 
 ```
 PyTaskGantt/
-├── README.md                  # 项目主文档
-├── ShadowBot_tasks.csv        # 示例 CSV 数据
-├── images/                    # README 截图
-├── vue/                       # Vue 版本（首选）
+├── README.md
+├── ShadowBot_tasks.csv          # 示例 CSV 数据
+├── images/                      # README 截图
+├── vue/
 │   ├── package.json
-│   ├── .env.example           # 环境变量模板（实际 .env 不入库）
-│   ├── server.cjs             # Express 后端，端口读 .env 中的 PORT
-│   ├── start.bat              # Windows 一键启动
+│   ├── .env.example
+│   ├── server.cjs               # Express 后端
+│   ├── start.bat                # Windows 一键启动
 │   ├── vite.config.js
+│   ├── POSTGRESQL.md            # PostgreSQL 存储说明
+│   ├── lib/csv.cjs              # CSV 解析工具
+│   ├── storage/                 # 存储后端（file / postgres）
 │   └── src/
-│       ├── App.vue
+│       ├── App.vue              # 根组件（Shell + 编排）
 │       ├── main.js
-│       ├── theme.js           # Naive UI AntD 风主题覆盖
+│       ├── theme.js             # Naive UI AntD 风主题
 │       ├── style.css
-│       ├── components/        # GanttChart / TaskEditor / TaskList / FilterPanel
-│       ├── services/          # dataService (API + 工具函数)
-│       └── data/tasks.json    # 数据持久化文件
-└── streamlit/
-    ├── .env.example           # Streamlit 数据源配置模板
-    ├── start.bat              # Windows uv 一键启动
-    ├── create_gantt.py        # 主程序
-    └── ShadowBot_tasks.csv    # 数据文件
+│       ├── components/
+│       │   ├── GanttChart.vue   # 甘特图（vis-timeline）
+│       │   ├── TaskList.vue     # 任务表格
+│       │   ├── TaskEditor.vue   # 编辑 Modal
+│       │   └── FilterPanel.vue  # 筛选与操作面板
+│       ├── services/
+│       │   └── dataService.js   # 数据层（API + 工具函数）
+│       └── data/
+│           └── tasks.json       # 默认数据文件
 ```
 
-## TODO
-
-- 数据导出为图像
-- 界面美化
-- 数据库支持
+---
 
 ## 📝 License
 
