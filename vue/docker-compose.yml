@@ -1,0 +1,43 @@
+services:
+  # ===== PyTaskGantt 应用 =====
+  pytaskgantt:
+    build: .
+    container_name: pytaskgantt
+    restart: unless-stopped
+    environment:
+      - PORT=3002
+      - CORS_ORIGIN=*
+      # --- 存储后端：二选一 ---
+      # 方式 A：本地文件（默认）
+      - STORAGE_DRIVER=file
+      - TASKS_FILE=/app/data/tasks.json
+      # 方式 B：PostgreSQL（取消下面注释，并注释掉上面两行）
+      # - STORAGE_DRIVER=postgres
+      # - DATABASE_URL=postgresql://user:password@db-host:5432/pytaskgantt
+      # 或用分散变量（pg 驱动自动识别）：
+      # - PGHOST=db-host
+      # - PGPORT=5432
+      # - PGDATABASE=pytaskgantt
+      # - PGUSER=app_user
+      # - PGPASSWORD=secret
+    volumes:
+      # 持久化任务数据（容器重建不丢数据）
+      - pytaskgantt-data:/app/data
+    labels:
+      # 启用 Traefik（由服务器上已有的 Traefik 实例自动发现）
+      - "traefik.enable=true"
+      # HTTPS 路由器
+      - "traefik.http.routers.pytaskgantt.rule=Host(`example.com`)"
+      - "traefik.http.routers.pytaskgantt.entrypoints=websecure"
+      - "traefik.http.routers.pytaskgantt.tls.certresolver=letsencrypt"
+      # 后端服务端口
+      - "traefik.http.services.pytaskgantt.loadbalancer.server.port=3002"
+    networks:
+      - traefik-network
+
+networks:
+  traefik-network:
+    external: true
+
+volumes:
+  pytaskgantt-data:

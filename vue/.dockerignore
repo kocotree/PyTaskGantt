@@ -1,0 +1,14 @@
+node_modules
+dist
+.git
+.gitignore
+.env
+*.md
+!POSTGRESQL.md
+.DS_Store
+.vite
+.playwright-mcp
+Dockerfile
+docker-compose.yml
+.dockerignore
+start.bat

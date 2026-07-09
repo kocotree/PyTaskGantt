@@ -7,8 +7,13 @@ export const DUMMY_DATE = '2025-01-01'
 // 后端端口由 .env 的 PORT 注入（见 vite.config.js 的 define）
 const API_PORT = import.meta.env.VITE_API_PORT || '3002'
 
-// 动态获取 API 地址（支持局域网访问）
+// 动态获取 API 地址
+//   开发模式：Vite dev server 与 Express 后端不同端口，需拼接完整地址
+//   生产模式（Docker / Vite build）：前后端同源，用相对路径即可
 function getApiBase() {
+  if (import.meta.env.PROD) {
+    return '/api'
+  }
   return 'http://' + window.location.hostname + ':' + API_PORT + '/api'
 }
 

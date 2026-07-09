@@ -3,6 +3,7 @@
  * 端口、CORS 来源由 .env 控制（参考 .env.example）
  */
 
+const fs = require('fs');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
@@ -22,7 +23,23 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 
+// ============== 生产环境静态文件 ==============
+// Docker 部署时 Vite build 产物在 dist/ 目录，由 Express 统一提供服务
+const distPath = path.join(__dirname, 'dist');
+const isProduction = fs.existsSync(distPath);
+if (isProduction) {
+  app.use(express.static(distPath));
+  console.log('📦 生产模式：托管前端静态文件 (dist/)');
+}
+
 // ============== API 路由 ==============
+
+/**
+ * GET /api/health - 健康检查（供 Docker HEALTHCHECK / 负载均衡探测）
+ */
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', storage: storage.driver });
+});
 
 /**
  * GET /api/tasks - 获取任务数据
@@ -140,6 +157,16 @@ app.get('/api/export/:format', async (req, res) => {
   }
 });
 
+// ============== SPA 回退（仅生产模式）==============
+// 所有非 API 的 GET 请求返回 index.html，让 Vue Router 处理客户端路由
+if (isProduction) {
+  app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api')) {
+      res.sendFile(path.join(distPath, 'index.html'));
+    }
+  });
+}
+
 // 启动服务器 (0.0.0.0 允许局域网访问)
 (async () => {
   try {
@@ -161,6 +188,7 @@ app.get('/api/export/:format', async (req, res) => {
     console.log(`📍 局域网: http://0.0.0.0:${PORT}`);
     console.log(`💾 存储后端: ${storage.describe()}`);
     console.log(`\n可用接口:`);
+    console.log(`  GET  /api/health       - 健康检查`);
     console.log(`  GET  /api/tasks        - 获取任务数据`);
     console.log(`  POST /api/tasks        - 保存任务数据`);
     console.log(`  POST /api/import       - 导入数据文件`);
