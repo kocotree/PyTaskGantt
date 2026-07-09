@@ -32,6 +32,58 @@ npm run dev     # 终端2：Vite 前端
 
 ---
 
+## 🐳 Docker 部署
+
+生产环境推荐用 Docker 部署：多阶段构建（Node 20 Alpine）先用 Vite 打包前端，再由 Express 单进程同时托管静态资源与 API。
+
+```bash
+cd vue
+cp docker-compose.yml.example docker-compose.yml   # 复制模板，按需修改
+# 编辑 docker-compose.yml：域名、存储后端、Traefik 证书解析器等
+docker compose up -d --build                        # 构建镜像并后台启动
+```
+
+镜像内 Express 监听 `3002`，通过 `pytaskgantt-data` 数据卷持久化 `/app/data`，容器重建不丢数据。
+
+### 环境变量
+
+`docker-compose.yml` 的 `environment` 段覆盖容器运行时配置，语义与 `.env` 一致：
+
+| 变量 | 说明 | 默认 |
+|:---|:---|:---|
+| `PORT` | 容器内 Express 端口（改动需同步 Traefik `loadbalancer.server.port`） | `3002` |
+| `CORS_ORIGIN` | 跨域白名单，生产建议收窄为具体域名 | `*` |
+| `STORAGE_DRIVER` | `file` / `postgres` | `file` |
+| `TASKS_FILE` | file 模式数据路径（容器内） | `/app/data/tasks.json` |
+| `DATABASE_URL` / `PG*` | postgres 模式连接串或分散变量 | — |
+
+### Traefik 反向代理（可选）
+
+模板内置 Traefik labels，供服务器上已有的 Traefik 实例自动发现，配好后即可 HTTPS 对外。**关键坑位**：
+
+- `traefik.http.routers.pytaskgantt.rule` — 换成你的域名 `Host(\`your-domain\`)`。
+- `traefik.http.routers.pytaskgantt.tls.certresolver` — **必须填 Traefik 实例里实际存在的证书解析器名字**，否则路由被静默丢弃、浏览器报 `ERR_CONNECTION_CLOSED`。查询方法：
+
+  ```bash
+  docker inspect <traefik容器> | grep certificatesresolvers
+  # 取 --certificatesresolvers.<名字>.acme... 中的 <名字> 填入 label
+  ```
+
+- `networks` 须与 Traefik 所在的 external 网络同名，否则发现不到本容器。
+
+> 若不用 Traefik，可自行改用 `ports:` 直接映射 `3002`，或换 Nginx / Caddy 等反代。
+
+**常用运维命令**：
+
+```bash
+docker compose ps                       # 查看容器状态
+docker compose logs -f pytaskgantt      # 跟踪应用日志
+docker compose up -d                    # 仅改 label / env 后热更新（无需 --build）
+docker compose up -d --build            # 改了源码 / Dockerfile 后重新构建
+```
+
+---
+
 ## 📸 效果预览
 
 ### 主界面：甘特图 + 任务列表 + 操作面板
@@ -111,6 +163,10 @@ PyTaskGantt/
 │   ├── server.cjs               # Express 后端
 │   ├── start.bat                # Windows 一键启动
 │   ├── vite.config.js
+│   ├── Dockerfile               # 多阶段构建镜像
+│   ├── docker-compose.yml.example  # Compose 部署模板（含 Traefik labels）
+│   ├── docker-entrypoint.sh     # 容器入口：首次注入种子数据
+│   ├── .dockerignore
 │   ├── POSTGRESQL.md            # PostgreSQL 存储说明
 │   ├── lib/csv.cjs              # CSV 解析工具
 │   ├── storage/                 # 存储后端（file / postgres）

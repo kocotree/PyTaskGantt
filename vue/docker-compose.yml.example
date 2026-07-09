@@ -5,16 +5,17 @@ services:
     container_name: pytaskgantt
     restart: unless-stopped
     environment:
-      - PORT=3002
-      - CORS_ORIGIN=*
+      - PORT=3002          # 容器内 Express 监听端口，改动需同步下方 loadbalancer 端口
+      - CORS_ORIGIN=*      # 生产建议收窄为具体域名，如 https://example.com
       # --- 存储后端：二选一 ---
-      # 方式 A：本地文件（默认）
+      # 方式 A：本地文件（默认，数据落在下方 volume 持久化目录）
       - STORAGE_DRIVER=file
       - TASKS_FILE=/app/data/tasks.json
-      # 方式 B：PostgreSQL（取消下面注释，并注释掉上面两行）
+      # 方式 B：PostgreSQL（取消下面注释，并注释掉上面 file 的两行）
+      # 注意：应用不建表，需先由 DBA 手动建好表，详见 vue/POSTGRESQL.md
       # - STORAGE_DRIVER=postgres
       # - DATABASE_URL=postgresql://user:password@db-host:5432/pytaskgantt
-      # 或用分散变量（pg 驱动自动识别）：
+      # 或用分散变量（pg 驱动自动识别，与 DATABASE_URL 二选一）：
       # - PGHOST=db-host
       # - PGPORT=5432
       # - PGDATABASE=pytaskgantt
@@ -24,19 +25,26 @@ services:
       # 持久化任务数据（容器重建不丢数据）
       - pytaskgantt-data:/app/data
     labels:
-      # 启用 Traefik（由服务器上已有的 Traefik 实例自动发现）
+      # 启用 Traefik（由服务器上已有的 Traefik 实例自动发现本容器）
       - "traefik.enable=true"
-      # HTTPS 路由器
+      # HTTPS 路由器：把 example.com 换成你的域名
       - "traefik.http.routers.pytaskgantt.rule=Host(`example.com`)"
+      # entrypoint 名称须与你的 Traefik 静态配置一致（常见为 websecure / https）
       - "traefik.http.routers.pytaskgantt.entrypoints=websecure"
+      # ⚠️ certresolver 必须填你的 Traefik 实例里【实际存在】的证书解析器名字，
+      #    否则路由会被静默丢弃、访问报 ERR_CONNECTION_CLOSED。
+      #    查询方法：docker inspect <traefik容器> | grep certificatesresolvers
+      #    取 --certificatesresolvers.<名字>.acme... 中的 <名字> 填在这里。
       - "traefik.http.routers.pytaskgantt.tls.certresolver=letsencrypt"
-      # 后端服务端口
+      # 后端服务端口（容器内 Express 监听端口，与上面 PORT 保持一致）
       - "traefik.http.services.pytaskgantt.loadbalancer.server.port=3002"
     networks:
+      # 须与 Traefik 所在的 external 网络同名，否则 Traefik 发现不到本容器
       - traefik-network
 
 networks:
   traefik-network:
+    # external: true 表示复用已有网络（由 Traefik 侧创建），不在此文件中新建
     external: true
 
 volumes:
