@@ -1,6 +1,6 @@
 # PyTaskGantt
 
-面向 RPA / 多机器人任务编排的交互式甘特图编辑器：拖拽改时间、筛选排序、CSV/JSON 双向导入导出，可切换文件或 PostgreSQL 持久化，一条 Docker 命令即可上线。
+面向 RPA / 多机器人任务编排的交互式甘特图编辑器：拖拽改时间、筛选排序、CSV/JSON 双向导入导出，可切换文件或 PostgreSQL 持久化。
 
 ![Vue](https://img.shields.io/badge/Vue-3-42b883?logo=vuedotjs&logoColor=white)
 ![Naive UI](https://img.shields.io/badge/Naive%20UI-2-63e2b7)
@@ -212,7 +212,7 @@ PyTaskGantt/
 
 ## Streamlit 参考实现
 
-`streamlit/` 是一份纯 Python 单文件实现（Streamlit + Plotly + Pandas），与 Vue 版共用 `Task,Start,Finish,Bot` 数据语义，主要用作对照基准。
+`streamlit/` 是一份早期版本，纯 Python 单文件实现（Streamlit + Plotly + Pandas），与 Vue 版共用 `Task,Start,Finish,Bot` 数据语义，主要用作对照基准。
 
 ```bash
 cd streamlit
