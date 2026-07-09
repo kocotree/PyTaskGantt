@@ -44,3 +44,6 @@ desktop.ini
 page.png
 *.tmp
 .playwright-mcp
+
+# === docker ===
+vue/docker-compose.yml

@@ -10,5 +10,6 @@ dist
 .playwright-mcp
 Dockerfile
 docker-compose.yml
+docker-compose.yml.example
 .dockerignore
 start.bat

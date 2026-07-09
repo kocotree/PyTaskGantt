@@ -160,10 +160,10 @@ app.get('/api/export/:format', async (req, res) => {
 // ============== SPA 回退（仅生产模式）==============
 // 所有非 API 的 GET 请求返回 index.html，让 Vue Router 处理客户端路由
 if (isProduction) {
-  app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api')) {
-      res.sendFile(path.join(distPath, 'index.html'));
-    }
+  // Express 5 的 path-to-regexp 不再接受裸 '*'，通配符须命名（如 '/*splat'）
+  app.get('/*splat', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next(); // 未匹配的 API 请求交给默认 404，避免挂起
+    res.sendFile(path.join(distPath, 'index.html'));
   });
 }
 
