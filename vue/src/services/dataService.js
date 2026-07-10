@@ -1,7 +1,7 @@
 // 数据服务层 - 任务数据管理（对接后端 API）
 import { BOT_PALETTE } from '../theme.js'
 
-// 用于跨天对齐的虚拟日期（与 Streamlit DUMMY_DATE 保持一致）
+// 用于跨天对齐的虚拟日期
 export const DUMMY_DATE = '2025-01-01'
 
 // 后端端口由 .env 的 PORT 注入（见 vite.config.js 的 define）
@@ -160,7 +160,7 @@ export function getAllBots() {
   return bots.sort()
 }
 
-// 筛选任务（清空 selectedBots 视为显示全部，对齐 Streamlit）
+// 筛选任务（清空 selectedBots 视为显示全部）
 export function filterTasks(
   tasks,
   { searchTerm = '', selectedBots = [], sortBy = 'bot' } = {}

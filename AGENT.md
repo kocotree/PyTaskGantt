@@ -4,12 +4,9 @@ This file provides guidance to coding agents when working with code in this repo
 
 ## 仓库结构概览
 
-本仓库是一个 RPA / 多机器人任务编排的甘特图编辑器，并行维护两套实现：
+本仓库是一个 RPA / 多机器人任务编排的甘特图编辑器，基于 Vue 3 + Naive UI 前端 + Express 后端，支持拖拽改时间、CSV/JSON 双格式持久化。
 
-- **`vue/`** — 首选版本。Vue 3 + Naive UI 前端 + Express 后端，支持拖拽改时间、CSV/JSON 双格式持久化。日常开发集中在这里。
-- **`streamlit/`** — 纯 Python 单文件实现（Streamlit + Plotly + Pandas），主要用作对照基准。
-
-两个版本共用 `Task,Start,Finish,Bot` 数据语义。`HH:MM:SS` 格式；当 `Finish < Start` 视为跨天，时长按次日计算。
+数据使用 `Task,Start,Finish,Bot` 四列语义，`HH:MM:SS` 格式；当 `Finish < Start` 视为跨天，时长按次日计算。
 
 ## 常用命令
 
@@ -24,26 +21,9 @@ npm run dev            # 仅启动前端 (Vite, 默认 :5174)
 npm run build          # 产物在 dist/
 ```
 
-> **测试服务收尾约定**：为验证改动而启动的本地服务（`npm start` / `npm run dev` / `npm run server` 的 Vite/Express，或 Streamlit），测试完成后必须主动停掉以释放端口（默认 `:5174` / `:3002` / `:8501`），不要把进程留在后台。Windows 下可用 `netstat -ano | findstr :5174` 找到 PID 后 `taskkill /PID <pid> /F`。
-
-### Streamlit 版本（在 `streamlit/` 目录下）
-
-```bash
-copy .env.example .env    # 首次：拷一份默认数据源配置
-start.bat    # Windows：uv 一键启动，http://localhost:8501
-```
-
-`start.bat` 会用 Python 3.12 在 `streamlit/.venv` 创建本地环境，并把 uv 下载缓存放到 `streamlit/.uv-cache`；如果已有 `.venv` 不是 Python 3.12，会自动重建。实际启动时会切到系统临时目录运行 Streamlit，再用绝对路径加载 `create_gantt.py`，避免网络盘目录影响 NumPy/Pandas 导入。
+> **测试服务收尾约定**：为验证改动而启动的本地服务（`npm start` / `npm run dev` / `npm run server` 的 Vite/Express），测试完成后必须主动停掉以释放端口（默认 `:5174` / `:3002`），不要把进程留在后台。Windows 下可用 `netstat -ano | findstr :5174` 找到 PID 后 `taskkill /PID <pid> /F`。
 
 仓库没有测试、lint、format 配置——不要假定 `npm test` 或 `npm run lint` 存在。
-
-### Streamlit 数据源配置
-
-`streamlit/.env`（不入库，从 `.env.example` 复制）控制 Streamlit 版的数据文件路径：
-
-- `TASKS_FILE` — CSV 数据文件路径。相对路径以 `streamlit/` 目录为基准；也支持绝对路径，例如 `../ShadowBot_tasks.csv` 或 `D:/data/tasks.csv`。
-
-配置优先级为系统环境变量 `TASKS_FILE` > `streamlit/.env` > 默认 `streamlit/ShadowBot_tasks.csv`。Streamlit 版继续只读写 CSV。
 
 ## Vue 架构要点
 

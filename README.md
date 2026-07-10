@@ -20,7 +20,7 @@
 - **任务编辑器** — Modal 表单编辑任务名、机器人、起止时间；支持输入新机器人标签（自动补色）和「此刻」快捷填入。
 - **搜索 · 筛选 · 排序** — 任务名模糊搜索、多选机器人过滤、三种排序（机器人名 / 开始 / 结束），甘特图与任务列表实时联动。
 - **跨天识别** — `Finish < Start` 自动判定为跨越午夜，时长按次日正确计算。
-- **CSV / JSON 双向互通** — 前端一键导入导出，数据语义与 Streamlit 参考版同源。
+- **CSV / JSON 双向互通** — 前端一键导入导出，覆盖完整的 CSV/JSON 格式互换。
 - **可切换存储** — 文件（JSON / CSV）或 PostgreSQL 两种后端，保存走增量差异更新，只写受影响的行。
 - **一键容器化** — 多阶段 Docker 镜像，Express 单进程同时托管前端静态资源与 API，内置可选 Traefik 反代标签。
 - **未保存提示** — Header 红点 + 保存按钮状态实时反映改动；「刷新」可丢弃本地拖拽/编辑，回到磁盘真相。
@@ -206,19 +206,5 @@ PyTaskGantt/
 │       ├── components/          # GanttChart / TaskList / TaskEditor / FilterPanel
 │       ├── services/dataService.js  # 唯一数据层
 │       └── data/tasks.json      # 默认示例数据
-└── streamlit/                   # Python 参考实现（对照基准）
-    └── create_gantt.py          # 单文件 Streamlit + Plotly + Pandas
 ```
 
-## Streamlit 参考实现
-
-`streamlit/` 是一份早期版本，纯 Python 单文件实现（Streamlit + Plotly + Pandas），与 Vue 版共用 `Task,Start,Finish,Bot` 数据语义，主要用作对照基准。
-
-```bash
-cd streamlit
-copy .env.example .env    # 首次：复制默认数据源配置
-start.bat                 # Windows：uv 一键启动，http://localhost:8501
-```
-
-> [!NOTE]
-> Streamlit 版仅读写 CSV，数据文件路径由 `streamlit/.env` 的 `TASKS_FILE` 控制。日常开发集中在 `vue/`。
