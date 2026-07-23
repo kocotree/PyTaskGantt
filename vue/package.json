@@ -16,6 +16,7 @@
     "migrate": "node storage/migrate.cjs",
     "migrate:pg": "node storage/migrate.cjs",
     "seed:dev": "node storage/seedDevUsers.cjs",
+    "admin:set": "node storage/setAdmin.cjs",
     "backfill:task": "node storage/backfillLegacyTask.cjs",
     "test": "npm run test:vitest && npm run test:node",
     "test:vitest": "vitest run",

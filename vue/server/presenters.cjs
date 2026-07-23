@@ -8,9 +8,9 @@ function pick(value, ...keys) {
   return undefined;
 }
 
-function presentUser(user) {
+function presentUser(user, { includeAdmin = false } = {}) {
   if (!user) return null;
-  return {
+  const presented = {
     id: String(user.id),
     display_name: pick(user, 'display_name', 'displayName') || '',
     avatar_url: pick(user, 'avatar_url', 'avatarUrl') || null,
@@ -22,6 +22,8 @@ function presentUser(user) {
     is_active: pick(user, 'is_active', 'isActive'),
     last_login_at: pick(user, 'last_login_at', 'lastLoginAt') || null,
   };
+  if (includeAdmin) presented.is_admin = Boolean(pick(user, 'is_admin', 'isAdmin'));
+  return presented;
 }
 
 function presentTask(task) {

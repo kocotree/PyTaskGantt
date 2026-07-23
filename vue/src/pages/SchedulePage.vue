@@ -3,7 +3,7 @@
     <section class="page-heading">
       <div>
         <h1>全员任务沙盘</h1>
-        <p>所有登录用户均可查看；仅任务所有者可编辑和拖拽。</p>
+        <p>所有登录用户均可查看；任务所有者与管理员可维护有效任务。</p>
       </div>
       <div class="page-heading-meta">
         <n-tag v-if="store.hasUnsaved.value" type="warning" :bordered="false">
@@ -25,7 +25,18 @@
             @task-click="handleTaskClick"
             @task-update="handleGanttUpdate"
           />
-          <TaskList :tasks="filteredTasks" @edit="openEdit" @delete="confirmDelete" @history="openHistory" />
+          <TaskList
+            :tasks="filteredTasks"
+            :can-recover="Boolean(auth.user?.is_admin)"
+            @edit="openEdit"
+            @delete="confirmDelete"
+            @history="openHistory"
+            @run="confirmRun"
+            @sync="syncOne"
+            @rebind="openRebind"
+            @transfer="openTransfer"
+            @recover="openRecovery"
+          />
         </div>
         <aside class="schedule-sidebar">
           <FilterPanel
@@ -60,22 +71,80 @@
       @submit="handleEditorSubmit"
       @delete="handleEditorDelete"
     />
+    <n-modal v-model:show="rebindVisible" preset="card" title="换绑影刀计划" class="responsive-modal compact-modal">
+      <p class="dialog-description">任务所有者不会改变；新绑定只接收绑定时间之后的执行记录。</p>
+      <SchedulePicker
+        v-model="rebindScheduleUuid"
+        :selected-name="actionTask?.schedule_name || ''"
+        :reserved-uuids="reservedScheduleUuids"
+      />
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="rebindVisible = false">取消</n-button>
+          <n-button type="primary" :disabled="!rebindScheduleUuid || rebindScheduleUuid === actionTask?.schedule_uuid" :loading="actionLoading" @click="confirmRebind">确认换绑</n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="transferVisible" preset="card" title="转交任务所有权" class="responsive-modal compact-modal">
+      <p class="dialog-description">仅明确转交会改变任务所有者；计划绑定和执行历史保持不变。</p>
+      <n-select v-model:value="targetUserId" :options="transferUserOptions" filterable placeholder="选择接收用户" />
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="transferVisible = false">取消</n-button>
+          <n-button type="warning" :disabled="!targetUserId" :loading="actionLoading" @click="confirmTransfer">确认转交</n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="recoveryVisible" preset="card" title="分配并绑定历史任务" class="responsive-modal compact-modal">
+      <n-alert type="warning" :show-icon="true" class="page-alert">
+        绑定从服务器当前时间生效，恢复前的执行记录不会移动到新绑定。
+      </n-alert>
+      <p class="dialog-description">
+        任务：{{ actionTask?.task }}（ID {{ actionTask?.id }}） · 当前版本 {{ actionTask?.version }}
+      </p>
+      <n-select v-model:value="recoveryOwnerUserId" :options="recoveryUserOptions" filterable placeholder="选择目标用户" />
+      <div style="height: 12px"></div>
+      <SchedulePicker
+        v-model="recoveryScheduleUuid"
+        :selected-name="actionTask?.schedule_name || ''"
+        :reserved-uuids="reservedScheduleUuids"
+        :include-bound="true"
+      />
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="recoveryVisible = false">取消</n-button>
+          <n-button type="primary" :disabled="!recoveryOwnerUserId || !recoveryScheduleUuid" :loading="actionLoading" @click="confirmRecovery">确认分配并绑定</n-button>
+        </n-space>
+      </template>
+    </n-modal>
     <ExecutionHistoryDialog v-model:show="historyVisible" :task="historyTask" />
   </AppShell>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { NAlert, NSpin, NTag, useDialog, useMessage } from 'naive-ui'
+import { NAlert, NButton, NModal, NSelect, NSpace, NSpin, NTag, useDialog, useMessage } from 'naive-ui'
 import AppShell from '../components/AppShell.vue'
 import ExecutionHistoryDialog from '../components/ExecutionHistoryDialog.vue'
 import FilterPanel from '../components/FilterPanel.vue'
 import GanttChart from '../components/GanttChart.vue'
+import SchedulePicker from '../components/SchedulePicker.vue'
 import TaskEditor from '../components/TaskEditor.vue'
 import TaskList from '../components/TaskList.vue'
 import { auth } from '../services/authService.js'
 import { filterTasks, formatDateTime, summarizeSyncCutoff } from '../services/dataService.js'
-import { exportTasks, importTasks } from '../services/taskService.js'
+import {
+  exportTasks,
+  getUsers,
+  importTasks,
+  rebindTask,
+  recoverTask,
+  runTask,
+  syncTask,
+  transferTask,
+} from '../services/taskService.js'
 import { scheduleTaskStore as store } from '../stores/taskDraftStore.js'
 
 const message = useMessage()
@@ -89,6 +158,16 @@ const editorMode = ref('create')
 const editingTask = ref(null)
 const historyVisible = ref(false)
 const historyTask = ref(null)
+const actionTask = ref(null)
+const users = ref([])
+const actionLoading = ref(false)
+const rebindVisible = ref(false)
+const rebindScheduleUuid = ref('')
+const transferVisible = ref(false)
+const targetUserId = ref(null)
+const recoveryVisible = ref(false)
+const recoveryOwnerUserId = ref(null)
+const recoveryScheduleUuid = ref('')
 const refreshSeconds = Math.max(5, Number(auth.uiRefreshSeconds || 10))
 let refreshTimer = null
 
@@ -116,9 +195,15 @@ const filteredTasks = computed(() => filterTasks(store.tasks.value, {
   sortBy: sortBy.value,
 }))
 const reservedScheduleUuids = computed(() => store.tasks.value
-  .filter(task => task.id !== editingTask.value?.id)
+  .filter(task => task.id !== editingTask.value?.id && task.id !== actionTask.value?.id)
   .map(task => task.schedule_uuid)
   .filter(Boolean))
+const recoveryUserOptions = computed(() => users.value.map(user => ({
+  label: user.display_name,
+  value: String(user.id),
+})))
+const transferUserOptions = computed(() => recoveryUserOptions.value
+  .filter(option => option.value !== String(actionTask.value?.owner?.id || '')))
 
 onMounted(async () => {
   try {
@@ -126,6 +211,7 @@ onMounted(async () => {
   } catch (error) {
     message.error(`任务加载失败：${error.message}`)
   }
+  getUsers().then(result => { users.value = result }).catch(() => {})
   refreshTimer = window.setInterval(pollTasks, refreshSeconds * 1000)
   window.addEventListener('beforeunload', beforeUnload)
 })
@@ -167,6 +253,121 @@ function handleTaskClick(task) {
 function openHistory(task) {
   historyTask.value = task
   historyVisible.value = true
+}
+
+function ensureImmediateAction(task) {
+  if (!store.isDirty(task.id)) return true
+  message.warning('该任务有未保存草稿，请先保存或刷新后再执行立即操作。')
+  return false
+}
+
+function openRebind(task) {
+  if (!ensureImmediateAction(task)) return
+  actionTask.value = task
+  rebindScheduleUuid.value = task.schedule_uuid
+  rebindVisible.value = true
+}
+
+function openTransfer(task) {
+  if (!ensureImmediateAction(task)) return
+  actionTask.value = task
+  targetUserId.value = null
+  transferVisible.value = true
+}
+
+function openRecovery(task) {
+  if (!auth.user?.is_admin) return message.error('仅管理员可恢复历史任务')
+  if (!ensureImmediateAction(task)) return
+  actionTask.value = task
+  recoveryOwnerUserId.value = task.owner?.id ? String(task.owner.id) : null
+  recoveryScheduleUuid.value = task.schedule_uuid || ''
+  recoveryVisible.value = true
+}
+
+function actionError(prefix, error) {
+  const hints = {
+    ADMIN_REQUIRED: '当前账号已不具备管理员权限，请刷新会话。',
+    VERSION_CONFLICT: '任务版本已变化，请刷新后重试。',
+    SCHEDULE_ALREADY_BOUND: '所选计划已被其他有效任务占用。',
+    TASK_ALREADY_ACTIVE: '该任务已是正常有效任务，请使用转交或换绑。',
+  }
+  message.error(`${prefix}：${hints[error.code] || error.message}`)
+}
+
+async function syncOne(task) {
+  try {
+    const result = await syncTask(task.id)
+    message.success(result.message || '任务同步完成')
+    await store.load({ preserveDraft: true, silent: true })
+  } catch (error) {
+    actionError('同步失败', error)
+  }
+}
+
+function confirmRun(task) {
+  if (!ensureImmediateAction(task)) return
+  dialog.warning({
+    title: '立即执行影刀计划',
+    content: `确定立即执行“${task.task}”吗？任务所有者不会因此改变。`,
+    positiveText: '立即执行',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        const result = await runTask(task.id)
+        message.success(result.task_uuid ? `影刀已受理，执行 UUID：${result.task_uuid}` : '影刀已受理')
+        await store.load({ preserveDraft: true, silent: true })
+      } catch (error) {
+        actionError('执行失败', error)
+      }
+    },
+  })
+}
+
+async function confirmRebind() {
+  actionLoading.value = true
+  try {
+    await rebindTask(actionTask.value.id, rebindScheduleUuid.value, actionTask.value.version)
+    rebindVisible.value = false
+    message.success('计划换绑成功')
+    await store.load({ preserveDraft: true, silent: true })
+  } catch (error) {
+    actionError('换绑失败', error)
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function confirmTransfer() {
+  actionLoading.value = true
+  try {
+    await transferTask(actionTask.value.id, targetUserId.value, actionTask.value.version)
+    transferVisible.value = false
+    message.success('任务已转交')
+    await store.load({ preserveDraft: true, silent: true })
+  } catch (error) {
+    actionError('转交失败', error)
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function confirmRecovery() {
+  actionLoading.value = true
+  try {
+    await recoverTask(
+      actionTask.value.id,
+      recoveryOwnerUserId.value,
+      recoveryScheduleUuid.value,
+      actionTask.value.version
+    )
+    recoveryVisible.value = false
+    message.success('历史任务已完成分配和绑定')
+    await store.load({ preserveDraft: true, silent: true })
+  } catch (error) {
+    actionError('恢复失败', error)
+  } finally {
+    actionLoading.value = false
+  }
 }
 
 function handleGanttUpdate({ id, start, finish }) {

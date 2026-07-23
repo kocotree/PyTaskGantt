@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 const DEFAULT_MIGRATIONS_DIR = path.resolve(__dirname, '..', '..', 'storage', 'migrations');
-const EXPECTED_LATEST_VERSION = 6;
+const EXPECTED_LATEST_VERSION = 7;
 const MIGRATION_LOCK_KEY = 1876249127;
 
 class MigrationError extends Error {

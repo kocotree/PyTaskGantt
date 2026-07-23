@@ -30,7 +30,8 @@ const TASK_SELECT = `
       'avatar_url', creator.avatar_url
     ) END AS created_by,
     (t.deleted_at IS NULL
-      AND t.owner_user_id = $2::bigint
+      AND (t.owner_user_id = $2::bigint OR $3::boolean = TRUE)
+      AND t.owner_user_id IS NOT NULL
       AND t.schedule_uuid IS NOT NULL
       AND t.schedule_bound_at IS NOT NULL) AS can_edit,
     (t.owner_user_id IS NULL OR t.schedule_uuid IS NULL OR t.schedule_bound_at IS NULL) AS is_legacy_unbound,
@@ -58,20 +59,31 @@ const TASK_SELECT = `
   ) summary ON TRUE
 `;
 
-async function loadTasksByIds(queryable, ids, currentUserId, { includeDeleted = false } = {}) {
+function actorValues(actor) {
+  if (actor && typeof actor === 'object') {
+    return {
+      userId: String(actor.userId ?? actor.user_id ?? actor.id),
+      isAdmin: Boolean(actor.isAdmin ?? actor.is_admin),
+    };
+  }
+  return { userId: String(actor), isAdmin: false };
+}
+
+async function loadTasksByIds(queryable, ids, actor, { includeDeleted = false } = {}) {
   if (!ids.length) return [];
+  const { userId, isAdmin } = actorValues(actor);
   const { rows } = await queryable.query(
     `${TASK_SELECT}
      WHERE t.id = ANY($1::bigint[]) ${includeDeleted ? '' : 'AND t.deleted_at IS NULL'}
      ORDER BY t.id`,
-    [ids, currentUserId]
+    [ids, userId, isAdmin]
   );
   return rows;
 }
 
-async function loadTaskById(queryable, id, currentUserId, options) {
-  const rows = await loadTasksByIds(queryable, [id], currentUserId, options);
+async function loadTaskById(queryable, id, actor, options) {
+  const rows = await loadTasksByIds(queryable, [id], actor, options);
   return rows[0] || null;
 }
 
-module.exports = { TASK_SELECT, loadTasksByIds, loadTaskById };
+module.exports = { TASK_SELECT, actorValues, loadTasksByIds, loadTaskById };

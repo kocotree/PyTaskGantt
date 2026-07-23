@@ -9,6 +9,10 @@ function requireSession(usersRepository) {
         if (!user) return next(new AuthenticationError('登录已失效，请重新登录'));
         req.userId = String(user.id);
         req.currentUser = user;
+        req.actor = Object.freeze({
+          userId: String(user.id),
+          isAdmin: Boolean(user.isAdmin ?? user.is_admin),
+        });
         next();
       })
       .catch(next);

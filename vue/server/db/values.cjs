@@ -45,6 +45,7 @@ function mapUserRow(row) {
     feishuUnionId: row.feishu_union_id || null,
     feishuTenantKey: row.feishu_tenant_key || null,
     isActive: Boolean(row.is_active),
+    isAdmin: Boolean(row.is_admin),
     createdAt: toIsoString(row.created_at),
     updatedAt: toIsoString(row.updated_at),
     lastLoginAt: toIsoString(row.last_login_at),

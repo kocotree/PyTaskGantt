@@ -27,7 +27,7 @@ function saveSession(req) {
 function sessionPayload(config, user = null) {
   return {
     authenticated: Boolean(user),
-    user: presentUser(user),
+    user: presentUser(user, { includeAdmin: true }),
     auth_mode: config.authMode,
     feishu_enabled: Boolean(config.feishuEnabled),
     ui_refresh_seconds: config.uiRefreshSeconds,

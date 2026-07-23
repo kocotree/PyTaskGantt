@@ -52,7 +52,9 @@ function createTasksRouter({ usersRepository, tasksRepository, taskMutationServi
   }));
 
   router.get('/tasks', asyncHandler(async (req, res) => {
-    const tasks = await tasksRepository.listAll(req.userId);
+    const tasks = await tasksRepository.listAll(req.userId, {
+      currentUserIsAdmin: req.actor.isAdmin,
+    });
     res.json({ tasks: tasks.map(presentTask), server_time: new Date().toISOString() });
   }));
 
@@ -70,14 +72,14 @@ function createTasksRouter({ usersRepository, tasksRepository, taskMutationServi
   }));
 
   router.post('/tasks/batch', asyncHandler(async (req, res) => {
-    const result = await taskMutationService.applyBatch(req.userId, req.body);
+    const result = await taskMutationService.applyBatch(req.actor, req.body);
     res.json({ ...result, tasks: (result.tasks || []).map(presentTask) });
   }));
 
   router.delete('/tasks/:id', asyncHandler(async (req, res) => {
     const id = parseTaskId(req.params.id);
     const { version } = parseBody(z.object({ version: versionSchema }), req.body || {});
-    const result = await taskMutationService.applyBatch(req.userId, {
+    const result = await taskMutationService.applyBatch(req.actor, {
       mutations: [{ type: 'delete', id, version }],
     });
     res.json({ ...result, tasks: (result.tasks || []).map(presentTask) });
@@ -89,7 +91,7 @@ function createTasksRouter({ usersRepository, tasksRepository, taskMutationServi
       schedule_uuid: z.string().trim().min(1).max(200),
       version: versionSchema,
     }), req.body);
-    const result = await taskActionService.rebind(req.userId, taskId, input);
+    const result = await taskActionService.rebind(req.actor, taskId, input);
     res.json({ ...result, task: presentTask(result.task) });
   }));
 
@@ -100,18 +102,18 @@ function createTasksRouter({ usersRepository, tasksRepository, taskMutationServi
       version: versionSchema,
     }), req.body);
     input.target_user_id = parseBigintId(input.target_user_id, '接收用户 ID');
-    const result = await taskActionService.transfer(req.userId, taskId, input);
+    const result = await taskActionService.transfer(req.actor, taskId, input);
     res.json({ ...result, task: presentTask(result.task) });
   }));
 
   router.post('/tasks/:id/run', asyncHandler(async (req, res) => {
     const taskId = parseTaskId(req.params.id);
-    res.status(202).json(await taskActionService.runNow(req.userId, taskId));
+    res.status(202).json(await taskActionService.runNow(req.actor, taskId));
   }));
 
   router.post('/tasks/:id/sync', asyncHandler(async (req, res) => {
     const taskId = parseTaskId(req.params.id);
-    res.status(202).json(await syncCoordinator.syncTask(req.userId, taskId));
+    res.status(202).json(await syncCoordinator.syncTask(req.actor, taskId));
   }));
 
   router.post('/my/tasks/sync', asyncHandler(async (req, res) => {

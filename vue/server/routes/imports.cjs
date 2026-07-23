@@ -11,7 +11,7 @@ function createImportsRouter({ tasksRepository, taskMutationService }) {
     const format = String(req.body && req.body.format || '').toLowerCase();
     if (!['csv', 'json'].includes(format)) throw new ValidationError('导入格式必须是 csv 或 json');
     const rows = parseTaskImport(req.body.content, format);
-    const result = await taskMutationService.applyBatch(req.userId, {
+    const result = await taskMutationService.applyBatch(req.actor, {
       mutations: rows.map((row, index) => ({ type: 'create', temp_id: `import:${index}`, ...row })),
       audit_action: 'import',
     });
@@ -26,7 +26,9 @@ function createImportsRouter({ tasksRepository, taskMutationService }) {
   router.get('/export/:format', asyncHandler(async (req, res) => {
     const format = String(req.params.format || '').toLowerCase();
     if (!['csv', 'json'].includes(format)) throw new ValidationError('导出格式必须是 csv 或 json');
-    const tasks = await tasksRepository.listAll(req.userId);
+    const tasks = await tasksRepository.listAll(req.userId, {
+      currentUserIsAdmin: req.actor.isAdmin,
+    });
     const output = exportTasks(tasks.map(presentTask), format);
     const date = new Date().toISOString().slice(0, 10);
     res.setHeader('Content-Type', output.contentType);

@@ -14,6 +14,7 @@ function createHarness({
   startError = null,
   taskOverrides = {},
   mutateTaskAfterPrepare = null,
+  requesterIsAdmin = false,
 } = {}) {
   let state = {
     task: {
@@ -71,6 +72,22 @@ function createHarness({
           }
 
           const transactionState = selectedState(client);
+          if (text.includes('FROM rpa_tasks AS task') && text.includes('requester.is_admin AS requester_is_admin')) {
+            const task = transactionState.task;
+            return {
+              rows: task && String(task.id) === String(params[0]) && !task.deleted_at
+                ? [{ ...task, requester_is_admin: requesterIsAdmin }]
+                : [],
+            };
+          }
+          if (text.includes('SELECT task.owner_user_id, actor.is_admin')) {
+            const task = transactionState.task;
+            return {
+              rows: task && String(task.id) === String(params[0])
+                ? [{ owner_user_id: task.owner_user_id, is_admin: requesterIsAdmin }]
+                : [],
+            };
+          }
           if (text.includes('FROM rpa_tasks WHERE id = $1') && text.includes('FOR UPDATE')) {
             const includeDeleted = !text.includes('deleted_at IS NULL');
             const task = transactionState.task;
@@ -353,6 +370,19 @@ test('an active execution from an earlier binding does not block the current sch
   assert.equal(result.task_uuid, 'remote-1');
   assert.equal(harness.startCalls.length, 1);
   assert.equal(harness.startCalls[0].scheduleUuid, 'schedule-1');
+});
+
+test('管理员可立即执行其他用户任务且审计保留真实操作者和 override 上下文', async () => {
+  const harness = createHarness({
+    taskOverrides: { owner_user_id: '8' },
+    requesterIsAdmin: true,
+  });
+  const result = await harness.service.runNow({ userId: '7', isAdmin: true }, '1');
+  assert.equal(result.normalized_status, '等待中');
+  const audit = harness.getState().audits[0];
+  assert.equal(audit.actor_user_id, '7');
+  assert.equal(audit.new_value.admin_override, true);
+  assert.equal(audit.new_value.task_owner_user_id, '8');
 });
 
 test('restart recovery reclaims a stale dispatching request with the same UUID', async () => {

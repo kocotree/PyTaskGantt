@@ -10,9 +10,9 @@ const {
   MigrationError,
 } = require('../server/db/migrations.cjs');
 
-test('migration catalog is exactly the ordered 001-006 target', () => {
+test('migration catalog is exactly the ordered 001-007 target', () => {
   const migrations = discoverMigrations();
-  assert.deepEqual(migrations.map(item => item.version), [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(migrations.map(item => item.version), [1, 2, 3, 4, 5, 6, 7]);
   assert.deepEqual(migrations.map(item => item.name), [
     '001_add_users_and_task_ownership.sql',
     '002_add_executions_and_binding_history.sql',
@@ -20,6 +20,7 @@ test('migration catalog is exactly the ordered 001-006 target', () => {
     '004_finalize_postgres_only_schema.sql',
     '005_add_durable_run_requests.sql',
     '006_add_binding_scoped_sync_generation.sql',
+    '007_add_admin_permission.sql',
   ]);
   migrations.forEach(item => assert.match(item.checksum, /^[a-f0-9]{64}$/));
 });
@@ -48,6 +49,8 @@ test('migrations contain every required durable table and critical invariant', (
   assert.match(sql, /sync_generation BIGINT NOT NULL DEFAULT 0/);
   assert.match(sql, /normalized_status IN \('等待中', '运行中', '未知状态'\)/);
   assert.match(sql, /audit_log_id\s+BIGINT UNIQUE REFERENCES public\.rpa_task_audit_log\(id\) ON DELETE RESTRICT/);
+  assert.match(sql, /ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT FALSE/);
+  assert.match(sql, /'admin_recover'/);
 });
 
 test('psql schema snapshot records the exact migration checksums', () => {
@@ -73,7 +76,7 @@ test('startup comparison rejects missing, outdated, and rewritten migration hist
     () => compareMigrationState(migrations, rewritten),
     error => error.code === 'MIGRATION_CHECKSUM_MISMATCH'
   );
-  assert.equal(compareMigrationState(migrations, migrations).currentVersion, 6);
+  assert.equal(compareMigrationState(migrations, migrations).currentVersion, 7);
 });
 
 test('manual runner refuses non-contiguous applied history instead of migrating out of order', async () => {

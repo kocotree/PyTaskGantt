@@ -457,10 +457,16 @@ class SyncCoordinator {
     return flight;
   }
 
-  syncTask(userId, taskId) {
-    const key = `${String(userId)}:${String(taskId)}`;
+  syncTask(actorInput, taskId) {
+    const actor = actorInput && typeof actorInput === 'object'
+      ? {
+          userId: String(actorInput.userId ?? actorInput.user_id ?? actorInput.id),
+          isAdmin: Boolean(actorInput.isAdmin ?? actorInput.is_admin),
+        }
+      : { userId: String(actorInput), isAdmin: false };
+    const key = `${actor.userId}:${String(taskId)}`;
     if (this.taskSyncFlights.has(key)) return this.taskSyncFlights.get(key);
-    const flight = this._syncTask(String(userId), String(taskId))
+    const flight = this._syncTask(actor, String(taskId))
       .finally(() => {
         this.taskSyncFlights.delete(key);
       });
@@ -468,7 +474,7 @@ class SyncCoordinator {
     return flight;
   }
 
-  async _syncTask(userId, taskId) {
+  async _syncTask(actor, taskId) {
     this._beginSync();
     let task = null;
     let attempt = null;
@@ -478,7 +484,7 @@ class SyncCoordinator {
       if (!task || task.deletedAt) {
         throw new SyncCoordinatorError('未找到可同步任务', { statusCode: 404, code: 'TASK_NOT_FOUND' });
       }
-      if (String(task.ownerUserId) !== String(userId)) {
+      if (String(task.ownerUserId) !== actor.userId && !actor.isAdmin) {
         throw new SyncCoordinatorError('只有当前所有者可以同步任务', {
           statusCode: 403,
           code: 'NOT_TASK_OWNER',

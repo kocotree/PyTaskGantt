@@ -26,7 +26,7 @@ test('verify.sql is fail-fast and executes entirely inside a read-only transacti
 
 test('verify.sql pins the exact ordered migration names and repository checksums', () => {
   const migrations = discoverMigrations();
-  assert.deepEqual(migrations.map(item => item.version), [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(migrations.map(item => item.version), [1, 2, 3, 4, 5, 6, 7]);
 
   for (const migration of migrations) {
     assert.match(
@@ -93,9 +93,10 @@ test('verify.sql covers every durable table, explicit index, and updated_at trig
   }
 });
 
-test('verify.sql checks critical field types and defaults from migrations 001-006', () => {
+test('verify.sql checks critical field types and defaults from migrations 001-007', () => {
   for (const tuple of [
     "('app_users', 'auth_provider', 'text', TRUE, '', '''dev''::text')",
+    "('app_users', 'is_admin', 'boolean', TRUE, '', 'false')",
     "('rpa_tasks', 'start_time', 'character varying(8)', TRUE, '', '''00:00:00''::character varying')",
     "('rpa_tasks', 'finish_time', 'character varying(8)', TRUE, '', '''00:00:00''::character varying')",
     "('rpa_tasks', 'version', 'integer', TRUE, '', '1')",

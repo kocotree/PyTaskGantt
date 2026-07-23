@@ -8,6 +8,7 @@ const { createAuthRouter } = require('./routes/auth.cjs');
 const { createTasksRouter } = require('./routes/tasks.cjs');
 const { createImportsRouter } = require('./routes/imports.cjs');
 const { createYingdaoRouter } = require('./routes/yingdao.cjs');
+const { createAdminRouter } = require('./routes/admin.cjs');
 const { AuthorizationError } = require('./errors.cjs');
 const { requireSession } = require('./middleware/requireSession.cjs');
 const { requireAllowedOrigin } = require('./middleware/requireAllowedOrigin.cjs');
@@ -92,6 +93,9 @@ function createApp({
     taskMutationService: services.taskMutation,
     taskActionService: services.taskActions,
     syncCoordinator: services.syncCoordinator,
+  }));
+  app.use('/api', createAdminRouter({
+    taskActionService: services.taskActions,
   }));
   app.use('/api', createImportsRouter({
     tasksRepository: repositories.tasks,

@@ -21,7 +21,8 @@ const TASK_LIST_SELECT = `
     creator.id AS created_by_id,
     creator.display_name AS created_by_display_name,
     creator.avatar_url AS created_by_avatar_url,
-    CASE WHEN task.owner_user_id = $1::bigint
+    CASE WHEN (task.owner_user_id = $1::bigint OR $2::boolean = TRUE)
+              AND task.owner_user_id IS NOT NULL
               AND task.schedule_uuid IS NOT NULL
               AND task.schedule_bound_at IS NOT NULL
          THEN TRUE ELSE FALSE END AS can_edit,
@@ -52,20 +53,20 @@ const TASK_LIST_SELECT = `
 function createTasksRepository(db) {
   if (!db || typeof db.query !== 'function') throw new TypeError('db.query is required');
 
-  async function listVisibleTasks({ currentUserId, executor = db } = {}) {
+  async function listVisibleTasks({ currentUserId, currentUserIsAdmin = false, executor = db } = {}) {
     if (currentUserId == null) throw new TypeError('currentUserId is required');
     const { rows } = await executor.query(
       `${TASK_LIST_SELECT}
        WHERE task.deleted_at IS NULL
        ORDER BY task.start_time, task.id`,
-      [currentUserId]
+      [currentUserId, Boolean(currentUserIsAdmin)]
     );
     return rows.map(mapTaskRow);
   }
 
   async function listOwnedTasks(ownerUserId, filters = {}, options = {}) {
     const executor = resolveExecutor(options, db);
-    const params = [ownerUserId];
+    const params = [ownerUserId, false];
     const conditions = [
       'task.deleted_at IS NULL',
       'task.owner_user_id = $1::bigint',

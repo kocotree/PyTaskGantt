@@ -19,7 +19,7 @@
 
 ## 发布后
 
-- [ ] `/api/health` 返回 PostgreSQL schema version 6。
+- [ ] `/api/health` 返回 PostgreSQL schema version 7。
 - [ ] `pg_stat_activity` 中新服务连接均显示预期 `PGAPPNAME`，且没有未知或遗留写入方重新出现。
 - [ ] 匿名访问业务 API 返回 401，开发切换接口符合当前 `AUTH_MODE`。
 - [ ] 飞书授权回调 URL 与 `FEISHU_REDIRECT_URI` 完全一致；验证登录、现有用户主动绑定、错误 state、租户白名单和 `FEISHU_AUTO_PROVISION` 策略。

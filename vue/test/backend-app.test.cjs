@@ -5,9 +5,9 @@ const { AuthorizationError, databaseError } = require('../server/errors.cjs');
 
 function buildApp(overrides = {}) {
   const users = [
-    { id: '1', display_name: '用户甲', avatar_url: null, auth_provider: 'dev' },
-    { id: '2', display_name: '用户乙', avatar_url: null, auth_provider: 'dev' },
-    { id: '3', display_name: '飞书用户', avatar_url: null, auth_provider: 'feishu' },
+    { id: '1', display_name: '用户甲', avatar_url: null, auth_provider: 'dev', is_admin: true },
+    { id: '2', display_name: '用户乙', avatar_url: null, auth_provider: 'dev', is_admin: false },
+    { id: '3', display_name: '飞书用户', avatar_url: null, auth_provider: 'feishu', is_admin: false },
   ];
   const repositories = {
     healthCheck: async () => true,
@@ -33,14 +33,15 @@ function buildApp(overrides = {}) {
   };
   const services = {
     taskMutation: {
-      applyBatch: async userId => {
-        if (userId !== '1') throw new AuthorizationError('只能修改自己的任务');
+      applyBatch: async actor => {
+        if (actor.userId !== '1') throw new AuthorizationError('只能修改自己的任务');
         return { success: true, tasks: [], id_map: {} };
       },
     },
     taskActions: {
       rebind: async () => ({}),
       transfer: async () => ({}),
+      recover: async () => ({}),
       runNow: async () => ({}),
     },
     syncCoordinator: {
@@ -68,7 +69,7 @@ function buildApp(overrides = {}) {
       sessionSecret: 'test-secret-test-secret-test-secret',
       sessionMaxAgeSeconds: 3600,
       secureCookies: false,
-      schemaVersion: 6,
+      schemaVersion: 7,
       uiRefreshSeconds: 10,
       ...overrides.config,
     },
@@ -115,11 +116,73 @@ describe('Express 会话与权限边界', () => {
     await agent.post('/api/auth/dev/switch').send({ user_id: '1' }).expect(200);
     const sessionResponse = await agent.get('/api/auth/session').expect(200);
     expect(sessionResponse.body.user.display_name).toBe('用户甲');
+    expect(sessionResponse.body.user.is_admin).toBe(true);
     const all = await agent.get('/api/tasks').expect(200);
     expect(all.body.tasks[0].can_edit).toBe(true);
     const mine = await agent.get('/api/my/tasks').expect(200);
     expect(mine.body.tasks).toHaveLength(1);
     await agent.post('/api/auth/logout').expect(200);
+    await agent.get('/api/tasks').expect(401);
+  });
+
+  it('每次请求从数据库刷新管理员状态并把可信 actor 传给管理员接口', async () => {
+    const actors = [];
+    const app = buildApp({
+      services: {
+        taskActions: {
+          rebind: async () => ({}),
+          transfer: async () => ({}),
+          runNow: async () => ({}),
+          recover: async actor => {
+            actors.push(actor);
+            return { success: true, task: { id: '10', task: '已恢复' } };
+          },
+        },
+      },
+    });
+    const agent = request.agent(app);
+    await agent.post('/api/auth/dev/switch').send({ user_id: '1' }).expect(200);
+    await agent.post('/api/admin/tasks/10/recover').send({
+      owner_user_id: '2', schedule_uuid: 'schedule-recover', version: 1,
+    }).expect(200);
+    expect(actors).toEqual([{ userId: '1', isAdmin: true }]);
+  });
+
+  it('撤销管理员或停用用户后，现有 session 从下一次 API 请求立即生效', async () => {
+    const user = {
+      id: '1', display_name: '用户甲', auth_provider: 'dev',
+      is_active: true, is_admin: true,
+    };
+    const actors = [];
+    const app = buildApp({
+      repositories: {
+        users: {
+          listActive: async () => user.is_active ? [user] : [],
+          listActiveDevUsers: async () => user.is_active ? [user] : [],
+          findActiveById: async id => user.is_active && String(id) === user.id ? { ...user } : null,
+          findActiveDevById: async id => user.is_active && String(id) === user.id ? { ...user } : null,
+          touchLastLogin: async () => {},
+        },
+      },
+      services: {
+        taskMutation: {
+          applyBatch: async actor => {
+            actors.push(actor);
+            return { success: true, tasks: [], id_map: {} };
+          },
+        },
+      },
+    });
+    const agent = request.agent(app);
+    await agent.post('/api/auth/dev/switch').send({ user_id: '1' }).expect(200);
+    await agent.post('/api/tasks/batch').send({ mutations: [] }).expect(200);
+    user.is_admin = false;
+    await agent.post('/api/tasks/batch').send({ mutations: [] }).expect(200);
+    expect(actors).toEqual([
+      { userId: '1', isAdmin: true },
+      { userId: '1', isAdmin: false },
+    ]);
+    user.is_active = false;
     await agent.get('/api/tasks').expect(401);
   });
 
@@ -167,7 +230,7 @@ describe('Express 会话与权限边界', () => {
       }]),
     }).expect(200);
     expect(imported).toEqual({
-      userId: '2',
+      userId: { userId: '2', isAdmin: false },
       body: {
         audit_action: 'import',
         mutations: [{

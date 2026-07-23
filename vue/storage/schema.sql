@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS public.schema_migrations (
 \ir migrations/004_finalize_postgres_only_schema.sql
 \ir migrations/005_add_durable_run_requests.sql
 \ir migrations/006_add_binding_scoped_sync_generation.sql
+\ir migrations/007_add_admin_permission.sql
 
 INSERT INTO public.schema_migrations (version, name, checksum) VALUES
   (1, '001_add_users_and_task_ownership.sql',
@@ -38,7 +39,9 @@ INSERT INTO public.schema_migrations (version, name, checksum) VALUES
   (5, '005_add_durable_run_requests.sql',
    'c6e6b76cb0d7d8cd51453f88bdb0b7ba1531b28928e7ef89b064926b6d339737'),
   (6, '006_add_binding_scoped_sync_generation.sql',
-   '60168641cc15991754ab058d321cec2176c01daddbf057cc2cf4a5a0acb7e12d')
+   '60168641cc15991754ab058d321cec2176c01daddbf057cc2cf4a5a0acb7e12d'),
+  (7, '007_add_admin_permission.sql',
+   'a4e8ac1df160e4ef9386b48707760f632a82b763009c2a5c5276545d0f01fe57')
 ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

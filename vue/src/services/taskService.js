@@ -89,6 +89,13 @@ export function transferTask(taskId, targetUserId, version) {
   })
 }
 
+export function recoverTask(taskId, ownerUserId, scheduleUuid, version) {
+  return apiRequest(`/admin/tasks/${encodeURIComponent(taskId)}/recover`, {
+    method: 'POST',
+    body: { owner_user_id: ownerUserId, schedule_uuid: scheduleUuid, version },
+  })
+}
+
 export function runTask(taskId) {
   return apiRequest(`/tasks/${encodeURIComponent(taskId)}/run`, { method: 'POST', body: {} })
 }

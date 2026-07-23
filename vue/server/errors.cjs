@@ -20,6 +20,12 @@ class AuthorizationError extends AppError {
   }
 }
 
+class AdminRequiredError extends AppError {
+  constructor(message = '仅管理员可执行此操作') {
+    super(403, 'ADMIN_REQUIRED', message);
+  }
+}
+
 class NotFoundError extends AppError {
   constructor(message = '资源不存在') {
     super(404, 'NOT_FOUND', message);
@@ -59,6 +65,7 @@ module.exports = {
   AppError,
   AuthenticationError,
   AuthorizationError,
+  AdminRequiredError,
   NotFoundError,
   ConflictError,
   ValidationError,

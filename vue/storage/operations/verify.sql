@@ -58,6 +58,7 @@ BEGIN
       ('app_users', 'feishu_union_id', 'text', FALSE, '', NULL),
       ('app_users', 'feishu_tenant_key', 'text', FALSE, '', NULL),
       ('app_users', 'is_active', 'boolean', TRUE, '', 'true'),
+      ('app_users', 'is_admin', 'boolean', TRUE, '', 'false'),
       ('app_users', 'created_at', 'timestamp with time zone', TRUE, '', 'now()'),
       ('app_users', 'updated_at', 'timestamp with time zone', TRUE, '', 'now()'),
       ('app_users', 'last_login_at', 'timestamp with time zone', FALSE, '', NULL),
@@ -180,7 +181,8 @@ BEGIN
       (3, '003_add_audit_and_sessions.sql', '9db862eebac53e2eccbd38946c7e9c0e9a9794f0d0cf382022fb43990af3c875'),
       (4, '004_finalize_postgres_only_schema.sql', '98ba7f05055bf6b886605f6da3edcc71f66d4c3d2b9fce124d33de834dd190df'),
       (5, '005_add_durable_run_requests.sql', 'c6e6b76cb0d7d8cd51453f88bdb0b7ba1531b28928e7ef89b064926b6d339737'),
-      (6, '006_add_binding_scoped_sync_generation.sql', '60168641cc15991754ab058d321cec2176c01daddbf057cc2cf4a5a0acb7e12d')
+      (6, '006_add_binding_scoped_sync_generation.sql', '60168641cc15991754ab058d321cec2176c01daddbf057cc2cf4a5a0acb7e12d'),
+      (7, '007_add_admin_permission.sql', 'a4e8ac1df160e4ef9386b48707760f632a82b763009c2a5c5276545d0f01fe57')
   ), mismatches AS (
     (
       SELECT version, name, checksum::TEXT AS checksum
@@ -203,7 +205,7 @@ BEGIN
     FROM mismatches;
 
   IF issue IS NOT NULL THEN
-    RAISE EXCEPTION 'schema_migrations 与仓库 001-006 不一致：%', issue;
+    RAISE EXCEPTION 'schema_migrations 与仓库 001-007 不一致：%', issue;
   END IF;
 
   WITH expected(table_name, index_name, is_unique, access_method, is_partial) AS (
@@ -349,7 +351,7 @@ BEGIN
       ('rpa_task_audit_log', 'rpa_task_audit_log_actor_user_id_fkey', 'f', TRUE,
        'FOREIGN KEY (actor_user_id) REFERENCES app_users(id) ON DELETE RESTRICT'),
       ('rpa_task_audit_log', 'ck_rpa_task_audit_log_action', 'c', FALSE,
-       'CHECK (action = ANY (ARRAY[''create''::text, ''update''::text, ''delete''::text, ''rebind''::text, ''transfer''::text, ''import''::text, ''run_now''::text])) NOT VALID'),
+       'CHECK (action = ANY (ARRAY[''create''::text, ''update''::text, ''delete''::text, ''rebind''::text, ''transfer''::text, ''import''::text, ''run_now''::text, ''admin_recover''::text])) NOT VALID'),
       ('rpa_task_run_requests', 'rpa_task_run_requests_pkey', 'p', TRUE,
        'PRIMARY KEY (idempotent_uuid)'),
       ('rpa_task_run_requests', 'rpa_task_run_requests_rpa_task_id_fkey', 'f', TRUE,
@@ -490,7 +492,7 @@ BEGIN
       SELECT 'ck_rpa_task_audit_log_action'
        WHERE EXISTS (
          SELECT 1 FROM public.rpa_task_audit_log
-          WHERE action NOT IN ('create', 'update', 'delete', 'rebind', 'transfer', 'import', 'run_now')
+          WHERE action NOT IN ('create', 'update', 'delete', 'rebind', 'transfer', 'import', 'run_now', 'admin_recover')
        )
     ) AS violation;
 

@@ -68,7 +68,7 @@ integration('PostgreSQL 真实事务与权限集成', () => {
         sessionCookieName: 'pytaskgantt.test.sid',
         sessionTableName: 'app_sessions',
         secureCookies: false,
-        schemaVersion: 6,
+        schemaVersion: 7,
       },
       pool,
       repositories,
@@ -156,6 +156,113 @@ integration('PostgreSQL 真实事务与权限集成', () => {
     expect(rollback.body.error.code).toBe('FORBIDDEN');
     const rolledBack = await pool.query(`SELECT id FROM rpa_tasks WHERE schedule_uuid = 'schedule-3'`);
     expect(rolledBack.rowCount).toBe(0);
+  });
+
+  it('管理员可维护任意有效任务、恢复历史任务，撤权后立即回到普通用户边界', async () => {
+    await pool.query(`UPDATE app_users SET is_admin = TRUE WHERE id = 1`);
+    const admin = await login(1);
+    const userB = await login(2);
+    let task = await createTask(userB, 'schedule-admin-owned-by-b');
+
+    const session = await admin.get('/api/auth/session').expect(200);
+    expect(session.body.user.is_admin).toBe(true);
+    const all = await admin.get('/api/tasks').expect(200);
+    expect(all.body.tasks.find(row => row.id === task.id).can_edit).toBe(true);
+    expect((await admin.get('/api/my/tasks').expect(200)).body.tasks).toHaveLength(0);
+
+    const updated = await admin.post('/api/tasks/batch').send({
+      mutations: [{
+        type: 'update', id: task.id, version: task.version,
+        changes: { note: '管理员代维护' },
+      }],
+    }).expect(200);
+    task = updated.body.tasks[0];
+    expect(task.owner_user_id).toBe('2');
+
+    task = (await admin.post(`/api/tasks/${task.id}/rebind`).send({
+      schedule_uuid: 'schedule-admin-rebound', version: task.version,
+    }).expect(200)).body.task;
+    expect(task.owner_user_id).toBe('2');
+    await admin.post(`/api/tasks/${task.id}/sync`).send({}).expect(202);
+    await admin.post(`/api/tasks/${task.id}/run`).send({}).expect(202);
+    task = (await admin.post(`/api/tasks/${task.id}/transfer`).send({
+      target_user_id: '1', version: task.version,
+    }).expect(200)).body.task;
+    expect(task.owner_user_id).toBe('1');
+
+    const deletable = await createTask(userB, 'schedule-admin-delete');
+    await admin.post('/api/tasks/batch').send({
+      mutations: [{ type: 'delete', id: deletable.id, version: deletable.version }],
+    }).expect(200);
+
+    const legacy = await pool.query(
+      `INSERT INTO rpa_tasks (task, start_time, finish_time, bot)
+       VALUES ('待恢复历史任务', '08:00:00', '09:00:00', '旧机器人')
+       RETURNING id::text AS id, version`
+    );
+    await pool.query(
+      `INSERT INTO rpa_task_executions (
+         task_uuid, rpa_task_id, schedule_uuid_at_run, normalized_status, trigger_time
+       ) VALUES ($1, $2, $3, '运行成功', NOW() - INTERVAL '1 day')`,
+      ['execution-before-recovery', legacy.rows[0].id, 'schedule-admin-recovered']
+    );
+    const recovered = await admin.post(`/api/admin/tasks/${legacy.rows[0].id}/recover`).send({
+      owner_user_id: '2',
+      schedule_uuid: 'schedule-admin-recovered',
+      version: legacy.rows[0].version,
+    }).expect(200);
+    expect(recovered.body.task).toMatchObject({
+      owner_user_id: '2',
+      schedule_uuid: 'schedule-admin-recovered',
+      can_edit: true,
+      is_legacy_unbound: false,
+      normalized_status: '待运行',
+    });
+    const recoveryState = await pool.query(
+      `SELECT execution.rpa_task_id::text AS rpa_task_id,
+              execution.trigger_time < task.schedule_bound_at AS before_recovery,
+              COUNT(history.id)::int AS active_binding_count
+         FROM rpa_task_executions execution
+         JOIN rpa_tasks task ON task.id = execution.rpa_task_id
+         JOIN rpa_task_binding_history history
+           ON history.rpa_task_id = task.id AND history.unbound_at IS NULL
+        WHERE execution.task_uuid = 'execution-before-recovery'
+        GROUP BY execution.rpa_task_id, execution.trigger_time, task.schedule_bound_at`
+    );
+    expect(recoveryState.rows[0]).toEqual({
+      rpa_task_id: legacy.rows[0].id,
+      before_recovery: true,
+      active_binding_count: 1,
+    });
+    await admin.post(`/api/admin/tasks/${task.id}/recover`).send({
+      owner_user_id: '2', schedule_uuid: 'schedule-invalid-recovery', version: task.version,
+    }).expect(409).expect(response => {
+      expect(response.body.error.code).toBe('TASK_ALREADY_ACTIVE');
+    });
+
+    const { rows: audits } = await pool.query(
+      `SELECT action, actor_user_id::text AS actor_user_id, new_value
+         FROM rpa_task_audit_log
+        WHERE task_id = ANY($1::bigint[])
+          AND actor_user_id = 1
+        ORDER BY id`,
+      [[task.id, deletable.id, legacy.rows[0].id]]
+    );
+    expect(audits.find(row => row.action === 'admin_recover')?.new_value.admin_override).toBe(true);
+    for (const audit of audits.filter(row => ['update', 'rebind', 'run_now', 'transfer', 'delete'].includes(row.action))) {
+      expect(audit.actor_user_id).toBe('1');
+      expect(audit.new_value.admin_override).toBe(true);
+      expect(audit.new_value.task_owner_user_id).toBe('2');
+    }
+
+    await pool.query(`UPDATE app_users SET is_admin = FALSE WHERE id = 1`);
+    const afterRevocation = await createTask(userB, 'schedule-after-admin-revocation');
+    await admin.post('/api/tasks/batch').send({
+      mutations: [{
+        type: 'update', id: afterRevocation.id, version: afterRevocation.version,
+        changes: { note: '不应成功' },
+      }],
+    }).expect(403);
   });
 
   it('并发绑定同一 scheduleUuid 时数据库只允许一个请求成功', async () => {

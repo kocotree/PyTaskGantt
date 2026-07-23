@@ -29,12 +29,38 @@ async function addAudit(client, { taskId, actorUserId, action, oldValue = null, 
 
 function assertOwner(row, userId) {
   if (!row) throw new NotFoundError('任务不存在或已删除');
-  if (row.owner_user_id == null || String(row.owner_user_id) !== String(userId)) {
+  const actor = normalizeActor(userId);
+  if (row.owner_user_id == null || (
+    String(row.owner_user_id) !== actor.userId && !actor.isAdmin
+  )) {
     throw new AuthorizationError('只能修改自己的任务');
   }
   if (!row.schedule_uuid || !row.schedule_bound_at) {
     throw new AuthorizationError('历史未绑定任务仅可只读；请先通过运维补齐所有者与计划绑定');
   }
+}
+
+function normalizeActor(actor) {
+  if (actor && typeof actor === 'object') {
+    const userId = actor.userId ?? actor.user_id ?? actor.id;
+    if (userId == null) throw new TypeError('actor.userId is required');
+    return {
+      userId: String(userId),
+      isAdmin: Boolean(actor.isAdmin ?? actor.is_admin),
+    };
+  }
+  if (actor == null) throw new TypeError('actor is required');
+  return { userId: String(actor), isAdmin: false };
+}
+
+function withAdminAudit(value, actor, taskOwnerUserId) {
+  const normalized = normalizeActor(actor);
+  if (!normalized.isAdmin || String(taskOwnerUserId) === normalized.userId) return value;
+  return {
+    ...(value || {}),
+    admin_override: true,
+    task_owner_user_id: taskOwnerUserId == null ? null : String(taskOwnerUserId),
+  };
 }
 
 async function lockTask(client, id) {
@@ -54,7 +80,9 @@ async function validateSchedule(scheduleDirectory, scheduleUuid, context) {
 
 function createTaskMutationService({ pool, scheduleDirectory }) {
   return {
-    async applyBatch(userId, body) {
+    async applyBatch(actorInput, body) {
+      const actor = normalizeActor(actorInput);
+      const userId = actor.userId;
       const input = parseBatch(body);
       const createSchedules = input.mutations
         .filter(item => item.type === 'create')
@@ -122,7 +150,7 @@ function createTaskMutationService({ pool, scheduleDirectory }) {
           }
 
           const current = await lockTask(client, mutation.id);
-          assertOwner(current, userId);
+          assertOwner(current, actor);
           if (Number(current.version) !== mutation.version) {
             throw new ConflictError('VERSION_CONFLICT', `任务「${current.task}」已被其他操作修改`, {
               task_id: String(current.id),
@@ -151,7 +179,7 @@ function createTaskMutationService({ pool, scheduleDirectory }) {
               actorUserId: userId,
               action: 'update',
               oldValue: Object.fromEntries(entries.map(([field]) => [field, current[FIELD_TO_COLUMN[field]]])),
-              newValue: mutation.changes,
+              newValue: withAdminAudit(mutation.changes, actor, current.owner_user_id),
             });
             changedIds.push(String(current.id));
             updated += 1;
@@ -181,12 +209,16 @@ function createTaskMutationService({ pool, scheduleDirectory }) {
             actorUserId: userId,
             action: 'delete',
             oldValue: { schedule_uuid: current.schedule_uuid, version: current.version },
-            newValue: { deleted_at: deletedAt.toISOString() },
+            newValue: withAdminAudit(
+              { deleted_at: deletedAt.toISOString() },
+              actor,
+              current.owner_user_id
+            ),
           });
           deleted += 1;
         }
 
-        const tasks = await loadTasksByIds(client, changedIds, userId);
+        const tasks = await loadTasksByIds(client, changedIds, actor);
         await client.query('COMMIT');
         return {
           success: true,
@@ -207,4 +239,11 @@ function createTaskMutationService({ pool, scheduleDirectory }) {
   };
 }
 
-module.exports = { createTaskMutationService, addAudit, assertOwner, lockTask };
+module.exports = {
+  createTaskMutationService,
+  addAudit,
+  assertOwner,
+  lockTask,
+  normalizeActor,
+  withAdminAudit,
+};

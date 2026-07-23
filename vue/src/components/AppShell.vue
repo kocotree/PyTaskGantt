@@ -25,6 +25,7 @@
           {{ initials }}
         </n-avatar>
         <span class="header-user-name">{{ auth.user?.display_name || '当前用户' }}</span>
+        <n-tag v-if="auth.user?.is_admin" size="small" type="error" :bordered="false">管理员</n-tag>
         <n-button
           v-if="auth.feishuEnabled && !auth.user?.feishu_bound"
           text
@@ -48,7 +49,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NAvatar, NButton, NLayout, NLayoutContent, NLayoutFooter, NLayoutHeader } from 'naive-ui'
+import { NAvatar, NButton, NLayout, NLayoutContent, NLayoutFooter, NLayoutHeader, NTag } from 'naive-ui'
 import { auth, feishuAuthorizationUrl, logout } from '../services/authService.js'
 import { hasAnyUnsavedTasks, resetAllTaskStores } from '../stores/taskDraftStore.js'
 

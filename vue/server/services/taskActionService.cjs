@@ -1,5 +1,6 @@
 const { randomUUID } = require('crypto');
 const {
+  AdminRequiredError,
   ConflictError,
   NotFoundError,
   ValidationError,
@@ -8,7 +9,13 @@ const {
 const { withTransaction } = require('../db/repositoryUtils.cjs');
 const { createRunRequestsRepository } = require('../db/runRequestsRepository.cjs');
 const { timestampAfter } = require('../db/values.cjs');
-const { addAudit, assertOwner, lockTask } = require('./taskMutationService.cjs');
+const {
+  addAudit,
+  assertOwner,
+  lockTask,
+  normalizeActor,
+  withAdminAudit,
+} = require('./taskMutationService.cjs');
 const { loadTaskById } = require('./taskQueries.cjs');
 const { EXECUTION_STATUS } = require('./executionStatus.cjs');
 
@@ -79,13 +86,15 @@ async function findActiveExecution(
   return rows[0] || null;
 }
 
-async function lockTaskForFirstRunClaim(client, taskId) {
+async function lockTaskForFirstRunClaim(client, taskId, requesterUserId) {
   const { rows } = await client.query(
-    `SELECT id, owner_user_id, schedule_uuid, schedule_bound_at, deleted_at
-       FROM rpa_tasks
-      WHERE id = $1
+    `SELECT task.id, task.owner_user_id, task.schedule_uuid, task.schedule_bound_at,
+            task.deleted_at, requester.is_admin AS requester_is_admin
+       FROM rpa_tasks AS task
+       JOIN app_users AS requester ON requester.id = $2 AND requester.is_active = TRUE
+      WHERE task.id = $1
       FOR UPDATE`,
-    [taskId]
+    [taskId, requesterUserId]
   );
   return rows[0] || null;
 }
@@ -118,10 +127,12 @@ function createTaskActionService({
   let recoveryTimer = null;
   let recoveryFlight = null;
 
-  async function rebind(userId, taskId, { schedule_uuid: scheduleUuid, version }) {
+  async function rebind(actorInput, taskId, { schedule_uuid: scheduleUuid, version }) {
+    const actor = normalizeActor(actorInput);
+    const userId = actor.userId;
     try {
       const preliminary = await readTaskForAuthorization(pool, taskId);
-      assertOwner(preliminary, userId);
+      assertOwner(preliminary, actor);
       if (Number(preliminary.version) !== version) throw new ConflictError('VERSION_CONFLICT');
       if (preliminary.schedule_uuid === scheduleUuid) throw new ValidationError('该任务已经绑定此计划');
       await scheduleDirectory.assertBindable(scheduleUuid, { actorUserId: userId, excludeTaskId: taskId });
@@ -132,7 +143,7 @@ function createTaskActionService({
     try {
       await client.query('BEGIN');
       const current = await lockTask(client, taskId);
-      assertOwner(current, userId);
+      assertOwner(current, actor);
       if (Number(current.version) !== version) throw new ConflictError('VERSION_CONFLICT');
       if (current.schedule_uuid === scheduleUuid) throw new ValidationError('该任务已经绑定此计划');
       const changedAt = timestampAfter(current.schedule_bound_at, now());
@@ -163,12 +174,15 @@ function createTaskActionService({
         actorUserId: userId,
         action: 'rebind',
         oldValue: { schedule_uuid: current.schedule_uuid },
-        newValue: { schedule_uuid: scheduleUuid, schedule_bound_at: changedAt.toISOString() },
+        newValue: withAdminAudit({
+          schedule_uuid: scheduleUuid,
+          schedule_bound_at: changedAt.toISOString(),
+        }, actor, current.owner_user_id),
       });
-      const task = await loadTaskById(client, taskId, userId);
+      const task = await loadTaskById(client, taskId, actor);
       await client.query('COMMIT');
       if (syncCoordinator && typeof syncCoordinator.syncTask === 'function') {
-        syncCoordinator.syncTask(userId, taskId).catch(() => undefined);
+        syncCoordinator.syncTask(actor, taskId).catch(() => undefined);
       }
       return { success: true, task };
     } catch (error) {
@@ -179,14 +193,18 @@ function createTaskActionService({
     }
   }
 
-  async function transfer(userId, taskId, { target_user_id: targetUserId, version }) {
-    if (String(userId) === String(targetUserId)) throw new ValidationError('任务已属于当前用户');
+  async function transfer(actorInput, taskId, { target_user_id: targetUserId, version }) {
+    const actor = normalizeActor(actorInput);
+    const userId = actor.userId;
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
       const current = await lockTask(client, taskId);
-      assertOwner(current, userId);
+      assertOwner(current, actor);
       if (Number(current.version) !== version) throw new ConflictError('VERSION_CONFLICT');
+      if (String(current.owner_user_id) === String(targetUserId)) {
+        throw new ValidationError('任务已属于该用户');
+      }
       const { rows: users } = await client.query(
         `SELECT id FROM app_users WHERE id = $1 AND is_active = TRUE`,
         [targetUserId]
@@ -205,9 +223,13 @@ function createTaskActionService({
         actorUserId: userId,
         action: 'transfer',
         oldValue: { owner_user_id: String(current.owner_user_id) },
-        newValue: { owner_user_id: String(targetUserId) },
+        newValue: withAdminAudit(
+          { owner_user_id: String(targetUserId) },
+          actor,
+          current.owner_user_id
+        ),
       });
-      const task = await loadTaskById(client, taskId, userId);
+      const task = await loadTaskById(client, taskId, actor);
       await client.query('COMMIT');
       return { success: true, task };
     } catch (error) {
@@ -218,10 +240,112 @@ function createTaskActionService({
     }
   }
 
-  async function prepareRunRequest(userId, taskId) {
+  async function recover(actorInput, taskId, {
+    owner_user_id: ownerUserId,
+    schedule_uuid: scheduleUuid,
+    version,
+  }) {
+    const actor = normalizeActor(actorInput);
+    if (!actor.isAdmin) throw new AdminRequiredError();
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const current = await lockTask(client, taskId);
+      if (!current) throw new NotFoundError('任务不存在或已删除');
+      if (Number(current.version) !== version) throw new ConflictError('VERSION_CONFLICT');
+      if (current.owner_user_id != null && current.schedule_uuid && current.schedule_bound_at) {
+        throw new ConflictError('TASK_ALREADY_ACTIVE', '任务已是正常有效任务，请使用转交或换绑功能');
+      }
+
+      const { rows: owners } = await client.query(
+        `SELECT id FROM app_users WHERE id = $1 AND is_active = TRUE FOR SHARE`,
+        [ownerUserId]
+      );
+      if (!owners[0]) throw new NotFoundError('目标用户不存在或已停用');
+
+      await scheduleDirectory.assertBindable(scheduleUuid, {
+        actorUserId: actor.userId,
+        excludeTaskId: taskId,
+      });
+      const { rows: occupied } = await client.query(
+        `SELECT id FROM rpa_tasks
+          WHERE schedule_uuid = $1
+            AND deleted_at IS NULL
+            AND id <> $2
+          LIMIT 1`,
+        [scheduleUuid, taskId]
+      );
+      if (occupied[0]) {
+        throw new ConflictError('SCHEDULE_ALREADY_BOUND', '该影刀计划已被其他任务绑定');
+      }
+
+      const boundAt = timestampAfter(current.schedule_bound_at, now());
+      if (current.schedule_uuid) {
+        await client.query(
+          `UPDATE rpa_task_binding_history
+              SET unbound_at = $2
+            WHERE rpa_task_id = $1 AND unbound_at IS NULL`,
+          [taskId, boundAt]
+        );
+      }
+      await client.query(
+        `INSERT INTO rpa_task_binding_history
+           (rpa_task_id, schedule_uuid, bound_at, actor_user_id)
+         VALUES ($1, $2, $3, $4)`,
+        [taskId, scheduleUuid, boundAt, actor.userId]
+      );
+      const { rows } = await client.query(
+        `UPDATE rpa_tasks
+            SET owner_user_id = $2,
+                schedule_uuid = $3,
+                schedule_bound_at = $4,
+                version = version + 1,
+                last_synced_at = NULL,
+                sync_error = NULL,
+                updated_at = $4
+          WHERE id = $1 AND version = $5 AND deleted_at IS NULL
+        RETURNING id`,
+        [taskId, ownerUserId, scheduleUuid, boundAt, version]
+      );
+      if (!rows[0]) throw new ConflictError('VERSION_CONFLICT');
+
+      await addAudit(client, {
+        taskId,
+        actorUserId: actor.userId,
+        action: 'admin_recover',
+        oldValue: {
+          owner_user_id: current.owner_user_id == null ? null : String(current.owner_user_id),
+          schedule_uuid: current.schedule_uuid || null,
+          schedule_bound_at: current.schedule_bound_at || null,
+          version: Number(current.version),
+        },
+        newValue: {
+          owner_user_id: String(ownerUserId),
+          schedule_uuid: scheduleUuid,
+          schedule_bound_at: boundAt.toISOString(),
+          version: Number(current.version) + 1,
+          admin_override: true,
+          task_owner_user_id: current.owner_user_id == null ? null : String(current.owner_user_id),
+        },
+      });
+      const task = await loadTaskById(client, taskId, actor);
+      await client.query('COMMIT');
+      return { success: true, task };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw databaseError(error);
+    } finally {
+      client.release();
+    }
+  }
+
+  async function prepareRunRequest(actorInput, taskId) {
+    const actor = normalizeActor(actorInput);
+    const userId = actor.userId;
     return withTransaction(pool, async client => {
       const current = await lockTask(client, taskId);
-      assertOwner(current, userId);
+      assertOwner(current, actor);
       if (!current.schedule_uuid) throw new ValidationError('任务尚未绑定影刀计划');
 
       if (await findActiveExecution(
@@ -286,12 +410,19 @@ function createTaskActionService({
       }
 
       if (request.attemptCount === 0) {
-        const task = await lockTaskForFirstRunClaim(client, request.rpaTaskId);
+        const task = await lockTaskForFirstRunClaim(
+          client,
+          request.rpaTaskId,
+          request.requestedByUserId
+        );
         const currentBoundAt = timestampValue(task && task.schedule_bound_at);
         const requestedBoundAt = timestampValue(request.scheduleBoundAtAtRequest);
         const contextChanged = !task
           || task.deleted_at != null
-          || String(task.owner_user_id) !== String(request.requestedByUserId)
+          || (
+            String(task.owner_user_id) !== String(request.requestedByUserId)
+            && !task.requester_is_admin
+          )
           || String(task.schedule_uuid || '') !== String(request.scheduleUuidAtRun)
           || !Number.isFinite(currentBoundAt)
           || currentBoundAt !== requestedBoundAt;
@@ -425,16 +556,27 @@ function createTaskActionService({
         );
       }
 
+      const { rows: auditContexts } = await client.query(
+        `SELECT task.owner_user_id, actor.is_admin
+           FROM rpa_tasks AS task
+           JOIN app_users AS actor ON actor.id = $2
+          WHERE task.id = $1`,
+        [current.rpaTaskId, current.requestedByUserId]
+      );
+      const auditContext = auditContexts[0] || {};
       const auditLogId = await addAudit(client, {
         taskId: current.rpaTaskId,
         actorUserId: current.requestedByUserId,
         action: 'run_now',
-        newValue: {
+        newValue: withAdminAudit({
           task_uuid: execution.taskUuid,
           idempotent_uuid: current.idempotentUuid,
           run_request_status: 'succeeded',
           recovered,
-        },
+        }, {
+          userId: current.requestedByUserId,
+          isAdmin: auditContext.is_admin,
+        }, auditContext.owner_user_id),
       });
       if (auditLogId == null) throw new Error('立即执行审计记录写入失败');
       const saved = await runRequests.markSucceeded(current.idempotentUuid, {
@@ -550,12 +692,12 @@ function createTaskActionService({
     return completed.response;
   }
 
-  async function runNow(userId, taskId) {
+  async function runNow(actor, taskId) {
     const taskKey = String(taskId);
     if (runningLocks.has(taskKey)) {
       throw new ConflictError('TASK_ALREADY_ACTIVE', '任务正在启动或运行中');
     }
-    const promise = prepareRunRequest(userId, taskId).then(dispatchRunRequest);
+    const promise = prepareRunRequest(actor, taskId).then(dispatchRunRequest);
     runningLocks.set(taskKey, promise);
     try {
       return await promise;
@@ -625,7 +767,7 @@ function createTaskActionService({
     recoveryTimer = null;
   }
 
-  return { rebind, transfer, runNow, recoverPendingRuns, start, stop };
+  return { rebind, transfer, recover, runNow, recoverPendingRuns, start, stop };
 }
 
 module.exports = { createTaskActionService };

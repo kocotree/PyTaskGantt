@@ -20,11 +20,14 @@
 
 <script setup>
 import { computed, h } from 'vue'
-import { NButton, NCard, NDataTable, NEmpty, NSpace, NTag, NText } from 'naive-ui'
+import { NButton, NCard, NDataTable, NDropdown, NEmpty, NSpace, NTag, NText } from 'naive-ui'
 import { statusType } from '../services/dataService.js'
 
-const props = defineProps({ tasks: { type: Array, required: true } })
-const emit = defineEmits(['edit', 'delete', 'history', 'locked-click'])
+const props = defineProps({
+  tasks: { type: Array, required: true },
+  canRecover: { type: Boolean, default: false },
+})
+const emit = defineEmits(['edit', 'delete', 'history', 'run', 'sync', 'rebind', 'transfer', 'recover'])
 
 const columns = computed(() => [
   {
@@ -62,18 +65,39 @@ const columns = computed(() => [
     render: row => h(NTag, { size: 'small', bordered: false, type: statusType(row.normalized_status) }, () => row.normalized_status),
   },
   {
-    title: '操作', key: 'actions', width: 132, fixed: 'right', align: 'center',
+    title: '操作', key: 'actions', width: 190, fixed: 'right', align: 'center',
     render(row) {
       if (!row.can_edit) {
         return h(NSpace, { size: 4, justify: 'center', wrap: false }, () => [
           h(NButton, { size: 'tiny', quaternary: true, onClick: () => emit('history', row) }, () => '历史'),
+          props.canRecover && row.is_legacy_unbound
+            ? h(NButton, {
+                size: 'tiny',
+                type: 'warning',
+                quaternary: true,
+                onClick: () => emit('recover', row),
+              }, () => '分配并绑定')
+            : null,
           h(NButton, { size: 'tiny', disabled: true, title: '仅任务所有者可编辑' }, () => '已锁定'),
         ])
       }
       return h(NSpace, { size: 4, justify: 'center', wrap: false }, () => [
         h(NButton, { size: 'tiny', type: 'primary', quaternary: true, onClick: () => emit('edit', row) }, () => '编辑'),
-        h(NButton, { size: 'tiny', type: 'error', quaternary: true, onClick: () => emit('delete', row) }, () => '删除'),
         h(NButton, { size: 'tiny', quaternary: true, onClick: () => emit('history', row) }, () => '历史'),
+        h(NDropdown, {
+          trigger: 'click',
+          options: [
+            { label: '立即执行', key: 'run' },
+            { label: '同步此任务', key: 'sync' },
+            { label: '换绑计划', key: 'rebind' },
+            { label: '转交所有权', key: 'transfer' },
+            { label: '删除任务（待保存）', key: 'delete' },
+          ],
+          onSelect(key) {
+            if (key === 'delete') emit('delete', row)
+            else emit(key, row)
+          },
+        }, { default: () => h(NButton, { size: 'tiny', quaternary: true }, () => '更多') }),
       ])
     },
   },

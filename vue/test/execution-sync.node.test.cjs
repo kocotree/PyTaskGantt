@@ -314,6 +314,9 @@ test('syncTask 校验所有权并同步指定任务', async () => {
     return true;
   });
   assert.equal(repositories.syncUpdates.length, updatesBeforeUnauthorized);
+  const adminResult = await coordinator.syncTask({ userId: 'admin', isAdmin: true }, '1');
+  assert.equal(adminResult.taskId, '1');
+  assert.equal(historyCalls, 2);
 });
 
 test('较旧的并发同步失败不能覆盖较新成功状态', async () => {

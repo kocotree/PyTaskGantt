@@ -51,6 +51,16 @@ test('task list summaries are scoped to the current schedule binding', async () 
   assert.match(db.calls[0].sql, /execution\.schedule_uuid_at_run = task\.schedule_uuid/);
   assert.match(db.calls[0].sql, /execution\.trigger_time >= task\.schedule_bound_at/);
   assert.match(db.calls[0].sql, /task\.schedule_uuid IS NOT NULL[\s\S]*THEN TRUE ELSE FALSE END AS can_edit/);
+  assert.deepEqual(db.calls[0].params, ['5', false]);
+});
+
+test('管理员任务列表把全部正常有效任务标记为可编辑', async () => {
+  const db = queueDb([{ rows: [] }]);
+  const repository = createTasksRepository(db);
+  await repository.listAll('5', { currentUserIsAdmin: true });
+  assert.match(db.calls[0].sql, /owner_user_id = \$1::bigint OR \$2::boolean = TRUE/);
+  assert.match(db.calls[0].sql, /owner_user_id IS NOT NULL/);
+  assert.deepEqual(db.calls[0].params, ['5', true]);
 });
 
 test('new task and its initial binding interval are inserted in one transaction', async () => {
