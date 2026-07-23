@@ -1,0 +1,15 @@
+name: pytaskgantt-local-test
+
+services:
+  pytaskgantt:
+    image: pytaskgantt:local
+    build:
+      context: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "3002:3002"
+    extra_hosts:
+      # 仅当 PostgreSQL 运行在宿主机时使用 PGHOST=host.docker.internal。
+      - "host.docker.internal:host-gateway"

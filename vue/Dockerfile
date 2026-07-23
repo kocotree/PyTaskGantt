@@ -12,6 +12,17 @@ COPY index.html ./
 COPY src/ ./src/
 RUN npm run build
 
+# ===== 测试阶段（CI / 本地验证：docker build --target test .）=====
+FROM build AS test
+COPY vitest.config.js ./
+COPY server.cjs ./
+COPY server/ ./server/
+COPY lib/ ./lib/
+COPY scripts/ ./scripts/
+COPY storage/ ./storage/
+COPY test/ ./test/
+RUN npm test
+
 # ===== 生产阶段 =====
 FROM node:20-alpine
 WORKDIR /app
@@ -20,18 +31,12 @@ WORKDIR /app
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json /app/package-lock.json ./
 COPY server.cjs ./
+COPY server/ ./server/
 COPY lib/ ./lib/
 COPY storage/ ./storage/
 
-# 默认数据种子（entrypoint 在首次启动时拷贝到持久化目录）
-COPY src/data/tasks.json ./default-tasks.json
-
 # 仅安装生产依赖
 RUN npm ci --omit=dev
-
-# entrypoint 脚本
-COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 3002
 
@@ -39,10 +44,9 @@ EXPOSE 3002
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3002/api/health',(r)=>{process.exit(r.statusCode===200?0:1)})"
 
+ENV NODE_ENV=production
 ENV PORT=3002
-ENV CORS_ORIGIN=*
-ENV STORAGE_DRIVER=file
-ENV TASKS_FILE=/app/data/tasks.json
+ENV YINGDAO_BASE_URL=https://api.yingdao.com
 
-ENTRYPOINT ["docker-entrypoint.sh"]
+USER node
 CMD ["node", "server.cjs"]

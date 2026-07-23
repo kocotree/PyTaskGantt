@@ -420,3 +420,651 @@ button {
   border-radius: 2px;
   width: 3px;
 }
+
+/* === RPA 看板应用布局 === */
+html,
+body,
+#app {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.app-layout {
+  min-height: 100vh;
+  background: #f5f7fa;
+}
+
+.app-header {
+  min-height: 64px;
+  padding: 0 24px;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
+  align-items: center;
+  gap: 24px;
+  background: #fff;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .04);
+}
+
+.app-header .header-logo {
+  color: inherit;
+}
+
+.app-nav {
+  display: flex;
+  align-self: stretch;
+  align-items: center;
+  gap: 4px;
+}
+
+.app-nav a {
+  position: relative;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 18px;
+  color: rgba(0, 0, 0, .65);
+  font-weight: 500;
+}
+
+.app-nav a.router-link-active {
+  color: #1677ff;
+}
+
+.app-nav a.router-link-active::after {
+  content: "";
+  position: absolute;
+  right: 18px;
+  bottom: 0;
+  left: 18px;
+  height: 2px;
+  background: #1677ff;
+}
+
+.header-user {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.header-user-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-content {
+  min-width: 0;
+  padding: 24px;
+}
+
+.app-footer {
+  margin-top: auto;
+  padding: 12px 24px;
+  background: #fff;
+  color: rgba(0, 0, 0, .45);
+  font-size: 12px;
+  text-align: center;
+}
+
+.page-heading {
+  max-width: 1680px;
+  margin: 0 auto 18px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.page-heading h1 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.35;
+}
+
+.page-heading p {
+  margin: 5px 0 0;
+  color: rgba(0, 0, 0, .55);
+}
+
+.page-heading-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: rgba(0, 0, 0, .45);
+  font-size: 12px;
+}
+
+.page-alert {
+  max-width: 1680px;
+  margin: 0 auto 16px;
+}
+
+.schedule-layout {
+  width: 100%;
+  max-width: 1680px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 304px;
+  gap: 20px;
+  align-items: start;
+}
+
+.schedule-main,
+.schedule-sidebar,
+.task-list-card,
+.my-task-table-card {
+  min-width: 0;
+}
+
+.schedule-main {
+  display: grid;
+  gap: 20px;
+}
+
+.schedule-sidebar {
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.filter-panel {
+  width: 100%;
+}
+
+.filter-section {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.filter-button-group {
+  width: 100%;
+  display: flex;
+}
+
+.filter-button-group > * {
+  flex: 1;
+}
+
+.filter-save-button {
+  margin-top: 10px;
+}
+
+.filter-control {
+  margin-top: 12px;
+}
+
+.filter-control > label {
+  display: block;
+  margin-bottom: 6px;
+  color: rgba(0, 0, 0, .55);
+  font-size: 12px;
+}
+
+.filter-stats {
+  display: flex;
+  gap: 8px;
+}
+
+.filter-stats .stat-card strong {
+  font-size: 20px;
+}
+
+.filter-stats .stat-card span {
+  color: rgba(0, 0, 0, .45);
+  font-size: 11px;
+}
+
+.table-empty {
+  padding: 36px 0;
+}
+
+.locked-task-row td {
+  color: rgba(0, 0, 0, .48);
+}
+
+.task-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.task-name-cell > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.owner-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.responsive-modal {
+  width: min(720px, calc(100vw - 24px));
+  max-height: calc(100vh - 32px);
+}
+
+.responsive-modal > .n-card__content {
+  overflow-y: auto;
+}
+
+.compact-modal {
+  width: min(560px, calc(100vw - 24px));
+}
+
+.task-editor-modal {
+  width: min(680px, calc(100vw - 24px));
+}
+
+.editor-alert {
+  margin: 0 0 16px;
+}
+
+.editor-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.current-binding {
+  width: 100%;
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-left: 3px solid #1677ff;
+  background: #f0f7ff;
+}
+
+.current-binding code,
+.current-binding small,
+.schedule-picker-uuid {
+  color: rgba(0, 0, 0, .5);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.schedule-picker-field {
+  width: 100%;
+}
+
+.schedule-picker-uuid {
+  margin-top: 5px;
+}
+
+.picker-cache-alert {
+  margin-top: 12px;
+}
+
+.schedule-result-list {
+  min-height: 180px;
+  max-height: min(480px, calc(100vh - 260px));
+  margin-top: 12px;
+  overflow-y: auto;
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+}
+
+.schedule-result-list > .n-spin,
+.schedule-result-list > .n-empty {
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.schedule-option {
+  width: 100%;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 0;
+  border-bottom: 1px solid #f5f5f5;
+  background: #fff;
+  color: rgba(0, 0, 0, .88);
+  text-align: left;
+  cursor: pointer;
+}
+
+.schedule-option:hover:not(:disabled) {
+  background: #f0f7ff;
+}
+
+.schedule-option:disabled {
+  color: rgba(0, 0, 0, .35);
+  background: #fafafa;
+  cursor: not-allowed;
+}
+
+.schedule-option > span:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.schedule-option strong,
+.schedule-option small {
+  overflow-wrap: anywhere;
+}
+
+.schedule-option small,
+.schedule-option-owner {
+  color: rgba(0, 0, 0, .45);
+  font-size: 11px;
+}
+
+.schedule-pagination {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 12px;
+}
+
+.execution-history-modal {
+  width: min(960px, calc(100vw - 24px));
+}
+
+.execution-list {
+  display: grid;
+  gap: 12px;
+}
+
+.execution-card {
+  padding: 13px;
+  border: 1px solid #e8e8e8;
+  border-radius: 7px;
+}
+
+.execution-card-head,
+.job-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.execution-card-head > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.execution-card time,
+.execution-card code {
+  color: rgba(0, 0, 0, .45);
+  font-size: 11px;
+}
+
+.execution-error {
+  margin: 8px 0;
+  color: #d9363e;
+}
+
+.job-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.job-card {
+  padding: 10px;
+  border-left: 3px solid #91caff;
+  background: #f5faff;
+}
+
+.job-card-head > span {
+  display: grid;
+}
+
+.job-card-head small {
+  color: rgba(0, 0, 0, .45);
+}
+
+.job-card pre {
+  max-height: 280px;
+  margin-top: 10px;
+  padding: 10px;
+  overflow: auto;
+  border-radius: 5px;
+  background: #202938;
+  color: #e6edf7;
+  font: 11px/1.55 "Fira Code", Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(circle at 20% 10%, #e6f4ff 0, transparent 34%), #f5f7fa;
+}
+
+.login-card {
+  width: min(480px, 100%);
+  box-shadow: 0 18px 60px rgba(22, 55, 100, .13);
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 22px;
+}
+
+.login-brand h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.login-brand p {
+  margin: 3px 0 0;
+  color: rgba(0, 0, 0, .5);
+}
+
+.login-alert {
+  margin-bottom: 14px;
+}
+
+.login-user-list {
+  display: grid;
+  gap: 8px;
+}
+
+.login-user-card {
+  min-height: 62px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid #e8e8e8;
+  border-radius: 7px;
+  background: #fff;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.login-user-card:hover:not(:disabled) {
+  border-color: #91caff;
+  background: #f5faff;
+}
+
+.login-user-card > span:nth-child(2) {
+  min-width: 0;
+  display: grid;
+}
+
+.login-user-card small {
+  color: rgba(0, 0, 0, .45);
+}
+
+.login-footnote {
+  margin: 18px 0 0;
+  color: rgba(0, 0, 0, .4);
+  font-size: 11px;
+  text-align: center;
+}
+
+.feishu-login-action {
+  margin-top: 16px;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  color: rgba(0, 0, 0, .35);
+  font-size: 12px;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #ececec;
+}
+
+.my-task-filter-card,
+.my-task-table-card {
+  max-width: 1680px;
+  margin: 0 auto 18px;
+}
+
+.my-task-filters {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, .8fr) minmax(180px, .8fr) 150px auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.data-cutoff {
+  color: rgba(0, 0, 0, .45);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.dialog-description {
+  margin: 0 0 16px;
+  color: rgba(0, 0, 0, .55);
+}
+
+@media (max-width: 1100px) {
+  .app-header {
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    padding: 8px 16px;
+  }
+
+  .app-nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    height: 42px;
+    justify-content: center;
+    order: 3;
+  }
+
+  .schedule-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .schedule-sidebar {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    grid-row: 1;
+  }
+
+  .filter-panel .n-card__content {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .filter-panel .filter-section,
+  .filter-panel > .n-card__content > .n-button {
+    margin: 0;
+  }
+
+  .my-task-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .data-cutoff {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 700px) {
+  .app-content {
+    padding: 14px 12px;
+  }
+
+  .app-header {
+    min-height: auto;
+  }
+
+  .header-user-name,
+  .header-subtitle {
+    display: none;
+  }
+
+  .app-nav a {
+    flex: 1;
+    justify-content: center;
+    padding: 0 8px;
+  }
+
+  .page-heading,
+  .my-tasks-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .page-heading-meta,
+  .my-tasks-heading > .n-space {
+    width: 100%;
+    flex-wrap: wrap !important;
+  }
+
+  .filter-panel .n-card__content,
+  .my-task-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .filter-stats {
+    display: flex;
+  }
+
+  .editor-footer,
+  .execution-card-head,
+  .job-card-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .schedule-option {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .vis-labelset .vis-label {
+    width: 150px;
+    min-width: 150px;
+    max-width: 150px;
+  }
+}
