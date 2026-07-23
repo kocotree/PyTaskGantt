@@ -5,25 +5,40 @@ services:
     container_name: pytaskgantt
     restart: unless-stopped
     environment:
-      - PORT=3002          # 容器内 Express 监听端口，改动需同步下方 loadbalancer 端口
-      - CORS_ORIGIN=*      # 生产建议收窄为具体域名，如 https://example.com
-      # --- 存储后端：二选一 ---
-      # 方式 A：本地文件（默认，数据落在下方 volume 持久化目录）
-      - STORAGE_DRIVER=file
-      - TASKS_FILE=/app/data/tasks.json
-      # 方式 B：PostgreSQL（取消下面注释，并注释掉上面 file 的两行）
-      # 注意：应用不建表，需先由 DBA 手动建好表，详见 vue/POSTGRESQL.md
-      # - STORAGE_DRIVER=postgres
-      # - DATABASE_URL=postgresql://user:password@db-host:5432/pytaskgantt
-      # 或用分散变量（pg 驱动自动识别，与 DATABASE_URL 二选一）：
-      # - PGHOST=db-host
-      # - PGPORT=5432
-      # - PGDATABASE=pytaskgantt
-      # - PGUSER=app_user
-      # - PGPASSWORD=secret
-    volumes:
-      # 持久化任务数据（容器重建不丢数据）
-      - pytaskgantt-data:/app/data
+      - NODE_ENV=production
+      - PORT=3002
+      - CORS_ORIGIN=${CORS_ORIGIN:?请设置为对外访问网址，例如 https://tasks.example.com}
+      # DATABASE_URL 非空时优先；否则应用根据完整的五项 PG* 自动生成。
+      - DATABASE_URL=${DATABASE_URL:-}
+      - PGHOST=${PGHOST:-}
+      - PGPORT=${PGPORT:-}
+      - PGDATABASE=${PGDATABASE:-}
+      - PGUSER=${PGUSER:-}
+      - PGPASSWORD=${PGPASSWORD:-}
+      # 留空时应用沿用 DATABASE_URL 中的 sslmode；拆分 PG* 配置可显式设置。
+      # 证书路径必须是容器内绝对路径，并通过 secrets/只读 volume 挂载对应文件。
+      - PGSSLMODE=${PGSSLMODE:-}
+      - PGSSLROOTCERT=${PGSSLROOTCERT:-}
+      - PGSSLCERT=${PGSSLCERT:-}
+      - PGSSLKEY=${PGSSLKEY:-}
+      - PGAPPNAME=${PGAPPNAME:-pytaskgantt}
+      - PGPOOL_MAX=${PGPOOL_MAX:-10}
+      - PGPOOL_IDLE_TIMEOUT_MS=${PGPOOL_IDLE_TIMEOUT_MS:-30000}
+      - PGPOOL_CONNECTION_TIMEOUT_MS=${PGPOOL_CONNECTION_TIMEOUT_MS:-5000}
+      - AUTH_MODE=${AUTH_MODE:?请显式设置；当前受控环境使用 dev，feishu 仅为后续 OAuth 预留}
+      - ALLOW_DEV_AUTH_IN_PRODUCTION=${ALLOW_DEV_AUTH_IN_PRODUCTION:-false}
+      - SESSION_SECRET=${SESSION_SECRET:?请设置至少 32 位随机会话密钥}
+      - SESSION_MAX_AGE_SECONDS=${SESSION_MAX_AGE_SECONDS:-28800}
+      - YINGDAO_ACCESS_KEY_ID=${YINGDAO_ACCESS_KEY_ID:?请设置影刀 Access Key ID}
+      - YINGDAO_ACCESS_KEY_SECRET=${YINGDAO_ACCESS_KEY_SECRET:?请设置影刀 Access Key Secret}
+      - YINGDAO_BASE_URL=${YINGDAO_BASE_URL:-https://api.yingdao.com}
+      - YINGDAO_SYNC_INTERVAL_SECONDS=${YINGDAO_SYNC_INTERVAL_SECONDS:-60}
+      - YINGDAO_SCHEDULE_CACHE_SECONDS=${YINGDAO_SCHEDULE_CACHE_SECONDS:-60}
+      - YINGDAO_BIND_CACHE_MAX_AGE_SECONDS=${YINGDAO_BIND_CACHE_MAX_AGE_SECONDS:-300}
+      - YINGDAO_REQUEST_TIMEOUT_MS=${YINGDAO_REQUEST_TIMEOUT_MS:-15000}
+      - EXECUTION_RETENTION_DAYS=${EXECUTION_RETENTION_DAYS:-30}
+      - JOB_LOG_CACHE_SECONDS=${JOB_LOG_CACHE_SECONDS:-300}
+      - UI_REFRESH_SECONDS=${UI_REFRESH_SECONDS:-10}
     labels:
       # 启用 Traefik（由服务器上已有的 Traefik 实例自动发现本容器）
       - "traefik.enable=true"
@@ -46,6 +61,3 @@ networks:
   traefik-network:
     # external: true 表示复用已有网络（由 Traefik 侧创建），不在此文件中新建
     external: true
-
-volumes:
-  pytaskgantt-data:

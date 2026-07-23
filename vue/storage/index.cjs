@@ -1,32 +1,74 @@
 /**
- * 存储后端工厂
- * 按 .env 的 STORAGE_DRIVER 选择实现，对外暴露统一接口：
- *   initStorage() / readTasks() / writeTasks(tasks) / describe()
+ * Transitional PostgreSQL-only storage facade.
  *
- * 默认 file（行为与改造前完全一致）；postgres 为可选后端。
- * 仅在选中某 driver 时才 require 其模块，未装 pg 时 file 模式不受影响。
+ * New code should use server/db directly. These exports keep the old startup
+ * module loadable while making destructive full-table save/import paths fail
+ * explicitly instead of silently overwriting another user's data.
  */
 
-const DRIVER = (process.env.STORAGE_DRIVER || 'file').toLowerCase();
+const { getConfig } = require('../server/config.cjs');
+const { getPool } = require('../server/db/pool.cjs');
+const { initializeRepositories } = require('../server/db/index.cjs');
 
-let impl;
-switch (DRIVER) {
-  case 'postgres':
-  case 'pg':
-    impl = require('./pgStore.cjs');
-    break;
-  case 'file':
-    impl = require('./fileStore.cjs');
-    break;
-  default:
-    throw new Error(`未知的 STORAGE_DRIVER: ${DRIVER}（可选 file | postgres）`);
+let pool = null;
+let repositories = null;
+let schemaState = null;
+
+async function initStorage() {
+  const config = getConfig({
+    requireSession: false,
+    requireYingdao: false,
+    validateApplication: false,
+  });
+  pool = getPool(config);
+  const initialized = await initializeRepositories(pool);
+  repositories = initialized.repositories;
+  schemaState = initialized.schema;
+  return schemaState;
+}
+
+function requireInitialized() {
+  if (!repositories) throw new Error('PostgreSQL storage has not been initialized');
+  return repositories;
+}
+
+async function readTasks() {
+  // Compatibility only: user id 0 cannot own a real BIGINT identity row, so all
+  // returned tasks are read-only. Authenticated routes should call listAll(userId).
+  return requireInitialized().tasks.listAll('0');
+}
+
+function fullTableMutationDisabled() {
+  const error = new Error(
+    'Full-table task writes are disabled. Use the authenticated mutation batch API.'
+  );
+  error.code = 'LEGACY_FULL_TABLE_WRITE_DISABLED';
+  error.status = 410;
+  throw error;
+}
+
+async function saveTasks() {
+  return fullTableMutationDisabled();
+}
+
+async function replaceTasks() {
+  return fullTableMutationDisabled();
+}
+
+function getRepositories() {
+  return requireInitialized();
+}
+
+function describe() {
+  return `postgres (schema version ${schemaState ? schemaState.currentVersion : 'unverified'})`;
 }
 
 module.exports = {
-  driver: DRIVER,
-  initStorage: impl.initStorage,
-  readTasks: impl.readTasks,
-  saveTasks: impl.saveTasks,       // 增量保存（POST /api/tasks）
-  replaceTasks: impl.replaceTasks, // 整体替换（POST /api/import、迁移）
-  describe: impl.describe,
+  driver: 'postgres',
+  initStorage,
+  readTasks,
+  saveTasks,
+  replaceTasks,
+  getRepositories,
+  describe,
 };

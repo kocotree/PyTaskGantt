@@ -36,6 +36,9 @@
           <span class="gantt-drag-tip-dot" :style="{ background: dragTip.color }"></span>
           {{ dragTip.bot }}
         </div>
+        <div class="gantt-drag-tip-owner">
+          {{ dragTip.owner }}<span v-if="dragTip.locked"> · 只读</span>
+        </div>
         <div class="gantt-drag-tip-time">
           {{ dragTip.start }} <span class="gantt-drag-tip-arrow">→</span> {{ dragTip.finish }}
           <span v-if="dragTip.duration" class="gantt-drag-tip-duration">{{ dragTip.duration }}</span>
@@ -59,6 +62,7 @@ import {
   DUMMY_DATE,
   isCrossDay,
   formatDuration,
+  escapeHtml,
 } from '../services/dataService.js'
 
 const props = defineProps({
@@ -91,6 +95,8 @@ const dragTip = ref({
   finish: '',
   duration: '',
   crossDay: false,
+  owner: '',
+  locked: false,
 })
 
 // 最近鼠标坐标（拖拽边缘自动滚动用）
@@ -217,6 +223,8 @@ function showTipFromTask(task, startStr, finishStr) {
   dragTip.value.finish = finishStr
   dragTip.value.duration = formatDuration(startStr, finishStr)
   dragTip.value.crossDay = isCrossDay(startStr, finishStr)
+  dragTip.value.owner = task.owner?.display_name || '历史任务'
+  dragTip.value.locked = !task.can_edit
   dragTip.value.visible = true
 }
 
@@ -251,6 +259,11 @@ const dynamicStyles = computed(() => {
   background-color: ${color};
   border-color: ${color};
 }
+.vis-item.${cls}.task-locked {
+  opacity: .58;
+  cursor: not-allowed;
+  background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.1) 0 5px, rgba(255,255,255,.3) 5px 8px);
+}
 `
     })
     .join('\n')
@@ -267,7 +280,8 @@ function buildItems(tasks) {
       content: '', // 任务条上不显示文字；时长改在 hover tooltip 显示
       start,
       end,
-      className: botClassName(t.bot),
+      editable: t.can_edit ? { updateTime: true, updateGroup: false, remove: false } : false,
+      className: `${botClassName(t.bot)}${t.can_edit ? '' : ' task-locked'}`,
       _raw: t,
     }
   })
@@ -284,7 +298,7 @@ function buildGroups(tasks) {
     content: `
       <div style="display:flex; align-items:center; gap:6px; padding-right:8px;">
         <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${getBotColor(t.bot)}; flex-shrink:0;"></span>
-        <span style="font-size:12px; font-weight:500; color:rgba(0,0,0,0.88); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${t.task} · ${t.bot}">${t.task}</span>
+        <span style="font-size:12px; font-weight:500; color:rgba(0,0,0,0.88); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(t.task)} · ${escapeHtml(t.bot)} · ${escapeHtml(t.owner?.display_name || '历史任务')}">${t.can_edit ? '' : '🔒 '}${escapeHtml(t.task)}</span>
       </div>
     `,
     className: botClassName(t.bot),
@@ -320,7 +334,7 @@ function createTimeline() {
     groupHeightMode: 'fixed',
     groupOrder: 'order',
     min: new Date(`${DUMMY_DATE}T00:00:00`),
-    max: new Date(`${DUMMY_DATE}T23:59:59`),
+    max: new Date('2025-01-02T23:59:59'),
     start: new Date(`${DUMMY_DATE}T08:30:00`),
     end: new Date(`${DUMMY_DATE}T13:00:00`),
     zoomMin: 1000 * 60 * 5, // 5 分钟
@@ -332,6 +346,10 @@ function createTimeline() {
     onMoving: (item, callback) => {
       // 拖拽过程中实时刷新自渲染 tooltip
       const raw = item._raw
+      if (!raw?.can_edit) {
+        callback(null)
+        return
+      }
       if (raw) {
         if (!isDragging) {
           isDragging = true
@@ -347,6 +365,10 @@ function createTimeline() {
       callback(item)
     },
     onMove: (item, callback) => {
+      if (!item._raw?.can_edit) {
+        callback(null)
+        return
+      }
       // 拖拽完成回调：vis-timeline 内部已经把新位置（含视窗平移）写到了 dataset 里。
       // 我们 emit 通知父组件更新数据源，但要抑制父组件回流引发的整体重建。
       const newStart = formatTime(item.start)
@@ -533,6 +555,10 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   color: rgba(255, 255, 255, 0.75);
+  font-size: 11px;
+}
+.gantt-drag-tip-owner {
+  color: rgba(255, 255, 255, 0.62);
   font-size: 11px;
 }
 .gantt-drag-tip-dot {

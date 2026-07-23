@@ -7,6 +7,7 @@ export default defineConfig(({ mode }) => {
   // 这样可以直接拿 PORT 注入到前端，避免再维护一个 VITE_API_PORT。
   const env = loadEnv(mode, process.cwd(), '')
   const apiPort = env.PORT || '3002'
+  const uiRefreshSeconds = env.UI_REFRESH_SECONDS || '10'
   const devPort = Number(env.VITE_DEV_PORT) || 5174
   const devHost = env.VITE_DEV_HOST || '0.0.0.0'
 
@@ -22,6 +23,7 @@ export default defineConfig(({ mode }) => {
     // 把后端端口暴露给前端代码（编译期字符串替换）
     define: {
       'import.meta.env.VITE_API_PORT': JSON.stringify(apiPort),
+      'import.meta.env.VITE_UI_REFRESH_SECONDS': JSON.stringify(uiRefreshSeconds),
     },
   }
 })

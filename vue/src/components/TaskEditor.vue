@@ -3,88 +3,87 @@
     :show="show"
     preset="card"
     :title="modalTitle"
-    :style="{ width: '560px' }"
+    class="responsive-modal task-editor-modal"
     :mask-closable="false"
     :bordered="false"
-    size="medium"
-    @update:show="v => $emit('update:show', v)"
+    @update:show="value => $emit('update:show', value)"
   >
-    <n-form
-      ref="formRef"
-      :model="form"
-      :rules="rules"
-      label-placement="top"
-      :show-require-mark="true"
-    >
+    <n-form ref="formRef" :model="form" :rules="rules" label-placement="top">
       <n-form-item label="任务名称" path="task">
-        <n-input
-          v-model:value="form.task"
-          placeholder="例如：登录系统"
-          maxlength="100"
-          show-count
-        />
+        <n-input v-model:value="form.task" placeholder="例如：登录系统" maxlength="100" show-count />
       </n-form-item>
 
-      <n-form-item label="机器人" path="bot">
-        <n-select
-          v-model:value="form.bot"
-          :options="botOptions"
-          placeholder="选择或输入新机器人"
-          filterable
-          tag
-        />
-      </n-form-item>
-
-      <n-grid :cols="2" :x-gap="16">
-        <n-form-item-gi label="开始时间" path="start">
-          <n-time-picker
-            v-model:formatted-value="form.start"
-            value-format="HH:mm:ss"
-            format="HH:mm:ss"
-            style="width: 100%;"
+      <n-grid cols="1 700:2" :x-gap="16">
+        <n-form-item-gi label="机器人 / Bot" path="bot">
+          <n-select
+            v-model:value="form.bot"
+            :options="botOptions"
+            placeholder="选择或输入新机器人"
+            filterable
+            tag
           />
         </n-form-item-gi>
-        <n-form-item-gi label="结束时间" path="finish">
-          <n-time-picker
-            v-model:formatted-value="form.finish"
-            value-format="HH:mm:ss"
-            format="HH:mm:ss"
-            style="width: 100%;"
+        <n-form-item-gi label="标签">
+          <n-select
+            v-model:value="form.tags"
+            :options="tagOptions"
+            placeholder="输入标签后回车"
+            filterable
+            multiple
+            tag
           />
         </n-form-item-gi>
       </n-grid>
 
-      <n-alert
-        v-if="isCrossDayTask"
-        type="info"
-        :show-icon="true"
-        style="margin-top: 8px;"
-      >
+      <n-grid cols="1 560:2" :x-gap="16">
+        <n-form-item-gi label="开始时间" path="start">
+          <n-time-picker v-model:formatted-value="form.start" value-format="HH:mm:ss" format="HH:mm:ss" />
+        </n-form-item-gi>
+        <n-form-item-gi label="结束时间" path="finish">
+          <n-time-picker v-model:formatted-value="form.finish" value-format="HH:mm:ss" format="HH:mm:ss" />
+        </n-form-item-gi>
+      </n-grid>
+
+      <n-alert v-if="isCrossDayTask" type="info" :show-icon="true" class="editor-alert">
         已识别为跨天任务（实际时长约 {{ durationText }}）
       </n-alert>
+
+      <n-form-item v-if="mode === 'create'" label="绑定影刀计划" path="schedule_uuid">
+        <SchedulePicker
+          v-model="form.schedule_uuid"
+          :selected-name="form.schedule_name"
+          :reserved-uuids="reservedScheduleUuids"
+          @select="schedule => form.schedule_name = schedule?.schedule_name || ''"
+        />
+      </n-form-item>
+      <n-form-item v-else label="当前影刀计划">
+        <div class="current-binding">
+          <strong>{{ form.schedule_name || (form.schedule_uuid ? '已绑定计划' : '历史任务待绑定') }}</strong>
+          <code>{{ form.schedule_uuid || '未绑定，仅可只读展示' }}</code>
+          <small v-if="form.schedule_uuid">如需更换计划，请在“我的任务”页面使用“换绑”。</small>
+        </div>
+      </n-form-item>
+
+      <n-form-item label="备注">
+        <n-input
+          v-model:value="form.note"
+          type="textarea"
+          :autosize="{ minRows: 3, maxRows: 7 }"
+          maxlength="2000"
+          show-count
+          placeholder="补充运行说明、交接信息或注意事项"
+        />
+      </n-form-item>
     </n-form>
 
     <template #footer>
       <div class="editor-footer">
-        <div>
-          <n-popconfirm
-            v-if="mode === 'edit'"
-            @positive-click="onDelete"
-            negative-text="取消"
-            positive-text="删除"
-          >
-            <template #trigger>
-              <n-button type="error" ghost>
-                删除任务
-              </n-button>
-            </template>
-            确定要删除任务「{{ form.task }}」吗？
-          </n-popconfirm>
-        </div>
+        <n-button v-if="mode === 'edit'" type="error" ghost @click="confirmDelete">删除任务</n-button>
+        <span v-else></span>
         <n-space>
           <n-button @click="$emit('update:show', false)">取消</n-button>
           <n-button type="primary" @click="onSubmit">
-            {{ mode === 'create' ? '添加任务' : '保存修改' }}
+            {{ mode === 'create' ? '加入待保存草稿' : '保存到草稿' }}
           </n-button>
         </n-space>
       </div>
@@ -93,124 +92,112 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import {
-  NModal,
+  NAlert,
+  NButton,
   NForm,
   NFormItem,
   NFormItemGi,
   NGrid,
   NInput,
+  NModal,
   NSelect,
-  NTimePicker,
-  NButton,
   NSpace,
-  NAlert,
-  NPopconfirm,
+  NTimePicker,
+  useDialog,
   useMessage,
 } from 'naive-ui'
-import { isCrossDay, formatDuration } from '../services/dataService.js'
+import SchedulePicker from './SchedulePicker.vue'
+import { formatDuration, isCrossDay, normalizeTime } from '../services/dataService.js'
 
 const props = defineProps({
   show: { type: Boolean, default: false },
-  mode: { type: String, default: 'create' }, // 'create' | 'edit'
+  mode: { type: String, default: 'create' },
   task: { type: Object, default: () => ({}) },
   allBots: { type: Array, default: () => [] },
+  allTags: { type: Array, default: () => [] },
+  reservedScheduleUuids: { type: Array, default: () => [] },
 })
-
 const emit = defineEmits(['update:show', 'submit', 'delete'])
-
 const message = useMessage()
+const dialog = useDialog()
 const formRef = ref(null)
-
-const form = ref({
+const form = reactive({
   id: null,
+  version: 0,
   task: '',
   bot: '',
   start: '09:00:00',
   finish: '09:30:00',
+  tags: [],
+  note: '',
+  schedule_uuid: '',
+  schedule_name: '',
 })
 
-// 监听 props.task 变化，同步到 form
-watch(
-  () => props.task,
-  newTask => {
-    if (newTask) {
-      form.value = {
-        id: newTask.id ?? null,
-        task: newTask.task ?? '',
-        bot: newTask.bot ?? '',
-        start: newTask.start ?? '09:00:00',
-        finish: newTask.finish ?? '09:30:00',
-      }
-    }
-  },
-  { immediate: true, deep: true }
-)
+watch(() => [props.show, props.task], () => {
+  if (!props.show) return
+  Object.assign(form, {
+    id: props.task?.id ?? null,
+    version: props.task?.version || 0,
+    task: props.task?.task || '',
+    bot: props.task?.bot || props.allBots[0] || '',
+    start: normalizeTime(props.task?.start || '09:00:00'),
+    finish: normalizeTime(props.task?.finish || '09:30:00'),
+    tags: [...(props.task?.tags || [])],
+    note: props.task?.note || '',
+    schedule_uuid: props.task?.schedule_uuid || '',
+    schedule_name: props.task?.schedule_name || '',
+  })
+}, { immediate: true, deep: true })
 
-const modalTitle = computed(() =>
-  props.mode === 'create' ? '新增任务' : '编辑任务'
-)
+const modalTitle = computed(() => props.mode === 'create' ? '新增任务' : '编辑任务')
+const botOptions = computed(() => [...new Set([...props.allBots, form.bot].filter(Boolean))].map(value => ({ label: value, value })))
+const tagOptions = computed(() => [...new Set([...props.allTags, ...form.tags])].map(value => ({ label: value, value })))
+const isCrossDayTask = computed(() => form.start && form.finish && isCrossDay(form.start, form.finish))
+const durationText = computed(() => formatDuration(form.start, form.finish))
 
-const botOptions = computed(() => {
-  const opts = props.allBots.map(b => ({ label: b, value: b }))
-  // 当前任务的机器人若不在列表中，补一项（编辑历史数据兼容）
-  if (form.value.bot && !props.allBots.includes(form.value.bot)) {
-    opts.unshift({ label: form.value.bot, value: form.value.bot })
-  }
-  return opts
-})
-
-const rules = {
-  task: [
-    { required: true, message: '请输入任务名称', trigger: ['blur', 'input'] },
-  ],
-  bot: [
-    { required: true, message: '请选择或输入机器人', trigger: ['blur', 'change'] },
-  ],
+const rules = computed(() => ({
+  task: [{ required: true, message: '请输入任务名称', trigger: ['blur', 'input'] }],
+  bot: [{ required: true, message: '请选择或输入机器人', trigger: ['blur', 'change'] }],
   start: [{ required: true, message: '请选择开始时间', trigger: 'change' }],
   finish: [{ required: true, message: '请选择结束时间', trigger: 'change' }],
-}
+  schedule_uuid: props.mode === 'create'
+    ? [{ required: true, message: '新任务必须绑定影刀计划', trigger: 'change' }]
+    : [],
+}))
 
-const isCrossDayTask = computed(() => {
-  if (!form.value.start || !form.value.finish) return false
-  return isCrossDay(form.value.start, form.value.finish)
-})
-
-const durationText = computed(() => {
-  if (!form.value.start || !form.value.finish) return ''
-  return formatDuration(form.value.start, form.value.finish)
-})
-
-function onSubmit() {
-  formRef.value?.validate(errors => {
-    if (errors) {
-      message.warning('请完善表单信息')
-      return
+async function onSubmit() {
+  try {
+    await formRef.value?.validate()
+    const payload = {
+      id: form.id,
+      version: form.version,
+      task: form.task,
+      bot: form.bot,
+      tags: [...new Set(form.tags.map(tag => tag.trim()).filter(Boolean))],
+      start: normalizeTime(form.start),
+      finish: normalizeTime(form.finish),
+      note: form.note,
     }
-    emit('submit', { ...form.value })
-  })
-}
-
-function onDelete() {
-  if (form.value.id != null) {
-    emit('delete', form.value.id)
+    if (props.mode === 'create') {
+      payload.schedule_uuid = form.schedule_uuid
+      payload.schedule_name = form.schedule_name
+    }
+    emit('submit', payload)
+  } catch {
+    message.warning('请完善表单信息')
   }
 }
+
+function confirmDelete() {
+  dialog.warning({
+    title: '确认删除',
+    content: `删除任务“${form.task}”将在下次点击保存时生效。`,
+    positiveText: '加入删除草稿',
+    negativeText: '取消',
+    onPositiveClick: () => emit('delete', form.id),
+  })
+}
 </script>
-
-<style scoped>
-.editor-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-top: 4px;
-}
-</style>
-
-<style>
-/* 全局：编辑器内删除按钮 hover 红色微阴影 */
-.n-modal .n-button--error-type.n-button--ghost:hover {
-  box-shadow: 0 1px 3px rgba(255, 77, 79, 0.2);
-}
-</style>

@@ -3,28 +3,52 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
+  "engines": {
+    "node": ">=20.19.0",
+    "npm": ">=10"
+  },
   "scripts": {
     "dev": "vite",
     "server": "node server.cjs",
-    "start": "concurrently -k -n SERVER,VITE -c blue,green \"node server.cjs\" \"vite\"",
+    "start": "node scripts/start-dev.cjs",
     "build": "vite build",
     "preview": "vite preview",
-    "migrate:pg": "node storage/migrate.cjs"
+    "migrate": "node storage/migrate.cjs",
+    "migrate:pg": "node storage/migrate.cjs",
+    "seed:dev": "node storage/seedDevUsers.cjs",
+    "backfill:task": "node storage/backfillLegacyTask.cjs",
+    "test": "npm run test:vitest && npm run test:node",
+    "test:vitest": "vitest run",
+    "test:node": "node --test test/*.node.test.cjs",
+    "test:watch": "vitest",
+    "test:backend": "vitest run test/backend-*.test.cjs && node --test test/db-*.node.test.cjs test/yingdao-*.node.test.cjs test/execution-*.node.test.cjs",
+    "test:frontend": "vitest run test/frontend-*.test.js",
+    "test:postgres": "node scripts/test-postgres.cjs"
   },
   "dependencies": {
+    "connect-pg-simple": "^10.0.0",
     "cors": "^2.8.5",
+    "csv-parse": "^5.6.0",
+    "csv-stringify": "^6.5.2",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "express-session": "^1.18.1",
     "naive-ui": "^2.40.0",
     "pg": "^8.22.0",
     "vfonts": "^0.0.3",
     "vis-data": "^7.1.9",
     "vis-timeline": "^7.7.3",
-    "vue": "^3.5.24"
+    "vue": "^3.5.24",
+    "vue-router": "^4.5.0",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^6.0.1",
-    "concurrently": "^9.1.0",
-    "vite": "^7.2.4"
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/test-utils": "^2.4.6",
+    "jsdom": "^25.0.1",
+    "pg-mem": "^3.0.5",
+    "supertest": "^7.2.2",
+    "vite": "^8.1.5",
+    "vitest": "^4.1.10"
   }
 }
