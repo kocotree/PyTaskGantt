@@ -25,6 +25,12 @@
           {{ initials }}
         </n-avatar>
         <span class="header-user-name">{{ auth.user?.display_name || '当前用户' }}</span>
+        <n-button
+          v-if="auth.feishuEnabled && !auth.user?.feishu_bound"
+          text
+          size="small"
+          @click="handleBindFeishu"
+        >绑定飞书</n-button>
         <n-button text size="small" @click="handleLogout">退出</n-button>
       </div>
     </n-layout-header>
@@ -41,12 +47,13 @@
 
 <script setup>
 import { computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { NAvatar, NButton, NLayout, NLayoutContent, NLayoutFooter, NLayoutHeader } from 'naive-ui'
-import { auth, logout } from '../services/authService.js'
+import { auth, feishuAuthorizationUrl, logout } from '../services/authService.js'
 import { hasAnyUnsavedTasks, resetAllTaskStores } from '../stores/taskDraftStore.js'
 
 const router = useRouter()
+const route = useRoute()
 const initials = computed(() => (auth.user?.display_name || '用户').trim().slice(0, 1))
 
 async function handleLogout() {
@@ -57,5 +64,10 @@ async function handleLogout() {
     resetAllTaskStores()
     await router.replace('/login')
   }
+}
+
+function handleBindFeishu() {
+  if (hasAnyUnsavedTasks() && !window.confirm('绑定飞书会离开当前页面，未保存的任务修改将丢失。是否继续？')) return
+  window.location.assign(feishuAuthorizationUrl({ intent: 'bind', redirect: route.fullPath }))
 }
 </script>

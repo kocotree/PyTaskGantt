@@ -27,6 +27,10 @@ function joinPath(path) {
   return `${apiBase()}${path.startsWith('/') ? path : `/${path}`}`
 }
 
+export function getApiUrl(path) {
+  return joinPath(path)
+}
+
 async function parseResponse(response) {
   if (response.status === 204) return null
   const type = response.headers.get('content-type') || ''

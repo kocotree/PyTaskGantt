@@ -1,5 +1,5 @@
 import { reactive, readonly } from 'vue'
-import { ApiError, apiRequest } from './apiClient.js'
+import { ApiError, apiRequest, getApiUrl, toQuery } from './apiClient.js'
 
 const authState = reactive({
   initialized: false,
@@ -7,6 +7,7 @@ const authState = reactive({
   authenticated: false,
   user: null,
   authMode: 'dev',
+  feishuEnabled: false,
   uiRefreshSeconds: 10,
 })
 
@@ -16,6 +17,7 @@ function applySession(payload = {}) {
   authState.authenticated = Boolean(payload.authenticated && payload.user)
   authState.user = authState.authenticated ? payload.user : null
   authState.authMode = payload.auth_mode || authState.authMode || 'dev'
+  authState.feishuEnabled = Boolean(payload.feishu_enabled)
   const refreshSeconds = Number(payload.ui_refresh_seconds)
   if (Number.isFinite(refreshSeconds) && refreshSeconds >= 5) {
     authState.uiRefreshSeconds = refreshSeconds
@@ -55,6 +57,10 @@ export async function switchDevUser(userId) {
   })
   applySession(payload)
   return authState.user
+}
+
+export function feishuAuthorizationUrl({ intent = 'login', redirect = '/schedule' } = {}) {
+  return getApiUrl(`/auth/feishu/start${toQuery({ intent, redirect })}`)
 }
 
 export async function logout() {

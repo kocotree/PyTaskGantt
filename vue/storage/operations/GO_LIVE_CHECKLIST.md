@@ -22,6 +22,7 @@
 - [ ] `/api/health` 返回 PostgreSQL schema version 6。
 - [ ] `pg_stat_activity` 中新服务连接均显示预期 `PGAPPNAME`，且没有未知或遗留写入方重新出现。
 - [ ] 匿名访问业务 API 返回 401，开发切换接口符合当前 `AUTH_MODE`。
+- [ ] 飞书授权回调 URL 与 `FEISHU_REDIRECT_URI` 完全一致；验证登录、现有用户主动绑定、错误 state、租户白名单和 `FEISHU_AUTO_PROVISION` 策略。
 - [ ] 用两个用户验证跨用户 update/delete/rebind/transfer/run 均被后端拒绝。
 - [ ] 验证差异保存、版本冲突整批回滚、scheduleUuid 唯一约束和软删除释放计划。
 - [ ] 验证启动恢复同步、活动执行恢复轮询、每日 30 天记录清理和五分钟日志缓存。

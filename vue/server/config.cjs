@@ -253,6 +253,84 @@ function resolveCorsConfig(env, { isProduction, validateApplication }) {
   return { origin: origins.join(','), origins };
 }
 
+function parseHttpUrl(value, key, { exactOrigin = false, requireHttps = false } = {}) {
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new ConfigError(`${key} must be a valid HTTP(S) URL`, key);
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.hash) {
+    throw new ConfigError(`${key} must be a valid HTTP(S) URL without credentials or fragment`, key);
+  }
+  if (exactOrigin && (parsed.pathname !== '/' || parsed.search)) {
+    throw new ConfigError(`${key} must be an exact origin without path or query`, key);
+  }
+  if (requireHttps && parsed.protocol !== 'https:') {
+    throw new ConfigError(`${key} must use HTTPS in production`, key);
+  }
+  return parsed;
+}
+
+function resolveFeishuConfig(env, { authMode, isProduction, validateApplication }) {
+  const core = {
+    appId: textValue(env, 'FEISHU_APP_ID'),
+    appSecret: textValue(env, 'FEISHU_APP_SECRET'),
+    redirectUri: textValue(env, 'FEISHU_REDIRECT_URI'),
+    appBaseUrl: textValue(env, 'APP_BASE_URL'),
+  };
+  const configured = Object.values(core).some(Boolean);
+  const enabled = authMode === 'feishu' || configured;
+  if (enabled && validateApplication) {
+    const missing = Object.entries(core).filter(([, value]) => !value).map(([key]) => ({
+      appId: 'FEISHU_APP_ID',
+      appSecret: 'FEISHU_APP_SECRET',
+      redirectUri: 'FEISHU_REDIRECT_URI',
+      appBaseUrl: 'APP_BASE_URL',
+    })[key]);
+    if (missing.length > 0) {
+      throw new ConfigError(`Feishu OAuth requires ${missing.join(', ')}`, missing[0]);
+    }
+  }
+
+  const requireHttps = Boolean(validateApplication && isProduction);
+  const appBaseUrl = core.appBaseUrl
+    ? parseHttpUrl(core.appBaseUrl, 'APP_BASE_URL', { exactOrigin: true, requireHttps }).origin
+    : '';
+  const redirectUri = core.redirectUri
+    ? parseHttpUrl(core.redirectUri, 'FEISHU_REDIRECT_URI', { requireHttps }).toString()
+    : '';
+  const authorizationUrlValue = textValue(
+    env,
+    'FEISHU_AUTHORIZATION_URL',
+    'https://accounts.feishu.cn/open-apis/authen/v1/authorize'
+  );
+  const apiBaseUrlValue = textValue(env, 'FEISHU_API_BASE_URL', 'https://open.feishu.cn');
+  const authorizationUrl = parseHttpUrl(
+    authorizationUrlValue,
+    'FEISHU_AUTHORIZATION_URL',
+    { requireHttps }
+  ).toString();
+  const apiBaseUrl = parseHttpUrl(apiBaseUrlValue, 'FEISHU_API_BASE_URL', { requireHttps })
+    .toString().replace(/\/$/, '');
+  const allowedTenantKeys = [...new Set(textValue(env, 'FEISHU_ALLOWED_TENANT_KEYS')
+    .split(',').map(value => value.trim()).filter(Boolean))];
+
+  return {
+    enabled: Boolean(enabled && core.appId && core.appSecret && redirectUri && appBaseUrl),
+    appId: core.appId,
+    appSecret: core.appSecret,
+    redirectUri,
+    appBaseUrl,
+    authorizationUrl,
+    apiBaseUrl,
+    autoProvision: booleanValue(env, 'FEISHU_AUTO_PROVISION', true),
+    allowedTenantKeys,
+    requestTimeoutMs: positiveInteger(env, 'FEISHU_REQUEST_TIMEOUT_MS', 10000),
+    stateTtlSeconds: positiveInteger(env, 'FEISHU_STATE_TTL_SECONDS', 600, { min: 60, max: 1800 }),
+  };
+}
+
 function positiveInteger(env, key, fallback, { min = 1, max = Number.MAX_SAFE_INTEGER } = {}) {
   const raw = textValue(env, key, String(fallback));
   const value = Number(raw);
@@ -308,6 +386,7 @@ function createConfig(env = process.env, options = {}) {
   }
 
   const cors = resolveCorsConfig(env, { isProduction, validateApplication });
+  const feishu = resolveFeishuConfig(env, { authMode, isProduction, validateApplication });
 
   const sessionSecret = requireSession
     ? requiredValue(env, 'SESSION_SECRET')
@@ -344,6 +423,7 @@ function createConfig(env = process.env, options = {}) {
       mode: authMode,
       allowDevInProduction: allowDevAuthInProduction,
     },
+    feishu,
     session: {
       secret: sessionSecret,
       maxAgeSeconds: positiveInteger(env, 'SESSION_MAX_AGE_SECONDS', 28800),

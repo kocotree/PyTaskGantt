@@ -15,6 +15,10 @@ function presentUser(user) {
     display_name: pick(user, 'display_name', 'displayName') || '',
     avatar_url: pick(user, 'avatar_url', 'avatarUrl') || null,
     auth_provider: pick(user, 'auth_provider', 'authProvider'),
+    feishu_bound: Boolean(
+      pick(user, 'feishu_union_id', 'feishuUnionId') ||
+      (pick(user, 'feishu_tenant_key', 'feishuTenantKey') && pick(user, 'feishu_open_id', 'feishuOpenId'))
+    ),
     is_active: pick(user, 'is_active', 'isActive'),
     last_login_at: pick(user, 'last_login_at', 'lastLoginAt') || null,
   };

@@ -110,9 +110,13 @@ npm run build        # 生产构建，产物在 dist/
 
 ## 身份、会话与权限
 
-当前已实现的登录方式是开发用户切换：
+当前支持开发用户切换和飞书 OAuth：
 
 - `AUTH_MODE=dev` 时，`/login` 从 `app_users` 读取有效的 dev 用户并创建服务端会话。
+- `AUTH_MODE=feishu` 时，`/login` 跳转飞书授权；回调按 `union_id`，或 `tenant_key + open_id` 定位内部用户并创建服务端会话。
+- dev 模式完整配置飞书参数后也会显示飞书入口，便于现有内部用户先登录再从页头主动绑定；绑定不会按显示名称自动合并。
+- `FEISHU_AUTO_PROVISION=true` 允许未绑定飞书身份首次登录时创建用户；设为 `false` 时只允许已绑定身份。可用 `FEISHU_ALLOWED_TENANT_KEYS` 限制租户。
+- OAuth `state` 一次性保存在 PostgreSQL session 中，默认十分钟过期；成功回调会重建 session，防止会话固定。
 - 会话 Cookie 为 HttpOnly、SameSite=Lax，生产环境启用 Secure，并采用滚动过期。
 - 除 `GET /api/health`、登录相关接口和前端静态资源外，所有业务 API 都要求有效会话。
 - 写请求还会检查 `CORS_ORIGIN`；生产环境禁止使用 `*`。
@@ -127,13 +131,15 @@ npm run build        # 生产构建，产物在 dist/
 | 同步“我的任务” | 仅同步当前用户拥有的任务 |
 
 > [!WARNING]
-> 本期**没有实现飞书 OAuth**。`AUTH_MODE=feishu` 只是为后续接入预留：它会关闭开发用户列表与切换接口，但不会提供 OAuth 跳转、回调或自动建会话。当前 `AUTH_MODE=dev` 仅适用于本地、测试或其他受控环境；`NODE_ENV=production` 默认拒绝 dev 模式，只有显式设置 `ALLOW_DEV_AUTH_IN_PRODUCTION=true` 才能启动，该开关不得用于开放公网环境。
+> 不要使用姓名匹配飞书账号。现有任务用户应在受控 dev 环境登录原账号后点击“绑定飞书”，再切换生产 `AUTH_MODE=feishu`。当前 `AUTH_MODE=dev` 仅适用于本地、测试或其他受控环境；`NODE_ENV=production` 默认拒绝 dev 模式。
+
+飞书开放平台需要创建企业自建应用、启用网页应用能力，并登记与 `FEISHU_REDIRECT_URI` 完全一致的重定向 URL。生产环境建议先保持 `AUTH_MODE=dev` 且完整填写飞书配置，让已有用户逐一从页头绑定；确认完成后再切换为 `AUTH_MODE=feishu`。若不希望未知飞书用户自动进入系统，设置 `FEISHU_AUTO_PROVISION=false`。
 
 ## 页面路由
 
 | 路径 | 说明 |
 |:---|:---|
-| `/login` | 开发用户选择页；未登录访问业务页会跳转至此 |
+| `/login` | 开发用户选择或飞书登录页；未登录访问业务页会跳转至此 |
 | `/schedule` | 全员甘特图，展示全部未删除任务并按 `can_edit` 控制编辑能力 |
 | `/my-tasks` | 当前用户的个人任务列表、筛选、同步、换绑、转交和立即执行入口 |
 
@@ -230,7 +236,7 @@ npm run backfill:task -- \
 |:---|:---|
 | 服务 | `NODE_ENV`、`PORT`、`VITE_DEV_PORT`、`VITE_DEV_HOST`、`CORS_ORIGIN` |
 | PostgreSQL | `DATABASE_URL`，或 `PGHOST`、`PGPORT`、`PGDATABASE`、`PGUSER`、`PGPASSWORD`；可选 `PGSSLMODE`、证书路径、`PGAPPNAME` 及 pool 参数 |
-| 身份与会话 | `AUTH_MODE`、`ALLOW_DEV_AUTH_IN_PRODUCTION`、`SESSION_SECRET`、`SESSION_MAX_AGE_SECONDS`、`SESSION_COOKIE_NAME` |
+| 身份与会话 | `AUTH_MODE`、`ALLOW_DEV_AUTH_IN_PRODUCTION`、`SESSION_SECRET`、会话参数；飞书的 `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_REDIRECT_URI`、`APP_BASE_URL`、自动建用户/租户/超时参数 |
 | 影刀 | `YINGDAO_ACCESS_KEY_ID`、`YINGDAO_ACCESS_KEY_SECRET`、`YINGDAO_BASE_URL`、请求/同步/缓存参数 |
 | 执行与页面 | `EXECUTION_RETENTION_DAYS`、`JOB_LOG_CACHE_SECONDS`、`UI_REFRESH_SECONDS` |
 
@@ -312,7 +318,7 @@ docker compose up -d
 - `CORS_ORIGIN` 使用实际 HTTPS 地址，不能是 `*`。
 - `SESSION_SECRET` 在生产环境至少 32 个字符。
 - 数据在外部 PostgreSQL 中持久化，应用容器不使用任务文件数据卷。
-- `AUTH_MODE=feishu` 当前没有 OAuth 实现；公开生产环境需先完成真实身份接入。
+- `AUTH_MODE=feishu` 必须完整注入飞书应用凭证、HTTPS 回调和 `APP_BASE_URL`，并在飞书开放平台登记完全一致的重定向 URL。
 - 仅在隔离、受控的临时环境中使用 `AUTH_MODE=dev`，并显式传入 `ALLOW_DEV_AUTH_IN_PRODUCTION=true`。
 - Compose 模板默认通过已有 Traefik external 网络暴露服务；证书解析器、域名和网络名必须与实际环境一致。
 

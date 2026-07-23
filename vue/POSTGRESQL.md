@@ -157,7 +157,7 @@ DEV_USER_NAMES=用户甲,用户乙 npm run seed:dev
 | 表 | 用途 |
 |:---|:---|
 | `schema_migrations` | 迁移版本和 checksum |
-| `app_users` | 内部用户、开发身份及未来飞书身份字段 |
+| `app_users` | 内部用户、开发身份和已绑定的飞书稳定身份 |
 | `rpa_tasks` | 排班任务当前状态、所有权、绑定、版本、同步状态和软删除 |
 | `rpa_task_binding_history` | scheduleUuid 的绑定生效与解除时间区间 |
 | `rpa_task_executions` | 最近执行记录、归一化状态、作业 UUID 和启动人 |
@@ -194,7 +194,19 @@ SESSION_COOKIE_NAME=pytaskgantt.sid
 - 所有 `/api` 业务路由都要求会话；匿名仅能访问健康检查和登录相关接口。
 - 所有权、版本、唯一绑定和写请求来源均由后端校验，前端的禁用状态不是安全边界。
 
-`AUTH_MODE=dev` 实现了手动切换开发用户。`AUTH_MODE=feishu` 目前只是预留配置：它关闭 dev 用户接口，但**没有飞书 OAuth 跳转、回调或建会话逻辑**。生产环境默认拒绝 dev 模式；`ALLOW_DEV_AUTH_IN_PRODUCTION=true` 仅可用于隔离、受控的临时环境。
+`AUTH_MODE=dev` 实现了手动切换开发用户。`AUTH_MODE=feishu` 使用飞书 OAuth 登录，并要求 `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_REDIRECT_URI` 和 `APP_BASE_URL`。回调优先按 `union_id`，否则按 `tenant_key + open_id` 查找用户。已登录内部用户可主动绑定；不会按姓名自动合并。`FEISHU_AUTO_PROVISION=false` 可关闭首次登录自动建用户，`FEISHU_ALLOWED_TENANT_KEYS` 可限制租户。生产环境仍默认拒绝 dev 模式；`ALLOW_DEV_AUTH_IN_PRODUCTION=true` 仅可用于隔离、受控的临时环境。
+
+飞书生产配置示例：
+
+```dotenv
+AUTH_MODE=feishu
+FEISHU_APP_ID=cli_xxx
+FEISHU_APP_SECRET=inject-from-secret-manager
+FEISHU_REDIRECT_URI=https://tasks.example.com/api/auth/feishu/callback
+APP_BASE_URL=https://tasks.example.com
+FEISHU_AUTO_PROVISION=false
+FEISHU_ALLOWED_TENANT_KEYS=tenant-key-from-feishu
+```
 
 前端通过三条路由使用上述会话：`/login` 创建或恢复会话，`/schedule` 读取全员任务，`/my-tasks` 只读取当前用户拥有的任务。业务页和对应 API 都不能绕过服务端会话与所有权检查。
 
@@ -274,7 +286,7 @@ docker compose up -d
 - `CORS_ORIGIN` 是只含精确 origin（无路径、查询、通配符）的 HTTPS allowlist；
 - `SESSION_SECRET` 至少 32 个字符；
 - 影刀凭证通过 secret 管理注入；
-- 认证模式与真实登录能力匹配，不能把预留的 `AUTH_MODE=feishu` 当成已完成 OAuth。
+- `AUTH_MODE=feishu` 的应用凭证、回调 URL、前端 URL 和租户/自动建用户策略与生产环境一致；回调 URL 已在飞书开放平台登记。
 
 ## 12. 验证与排障
 
@@ -335,4 +347,4 @@ SELECT pid, usename, application_name, client_addr, state, backend_start
 - TLS certificate file：证书路径必须为绝对路径且对 Node 运行用户可读。
 - `CORS_ORIGIN`：生产只接受精确 HTTPS origin；不能混入 `*`、HTTP、路径或查询参数。
 - dev 用户列表为空：确认 `AUTH_MODE=dev` 并运行 `npm run seed:dev`。
-- 服务能启动但无法登录：若为 `AUTH_MODE=feishu`，当前仓库没有 OAuth 实现；切回受控 dev 环境或完成真实身份接入。
+- 飞书登录回调失败：核对飞书开放平台登记的重定向 URL 与 `FEISHU_REDIRECT_URI` 是否完全一致，并检查 `APP_BASE_URL`、租户白名单和应用可用范围。

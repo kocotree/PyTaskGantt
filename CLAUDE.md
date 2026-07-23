@@ -40,19 +40,20 @@ npm run test:frontend
 - `SESSION_SECRET`
 - `YINGDAO_ACCESS_KEY_ID`
 - `YINGDAO_ACCESS_KEY_SECRET`
+- `AUTH_MODE=feishu` 时还需要 `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_REDIRECT_URI`、`APP_BASE_URL`
 
 主要配置分组：
 
 - 服务：`NODE_ENV`、`PORT`、`VITE_DEV_PORT`、`VITE_DEV_HOST`、`CORS_ORIGIN`
 - PostgreSQL：拆分连接参数及 `PGPOOL_MAX`、`PGPOOL_IDLE_TIMEOUT_MS`、`PGPOOL_CONNECTION_TIMEOUT_MS`
-- 身份：`AUTH_MODE`、`ALLOW_DEV_AUTH_IN_PRODUCTION`
+- 身份：`AUTH_MODE`、`ALLOW_DEV_AUTH_IN_PRODUCTION`、飞书应用凭证、回调/前端 URL、自动建用户和租户白名单
 - 会话：`SESSION_MAX_AGE_SECONDS`、`SESSION_COOKIE_NAME`
 - 影刀：Base URL、超时、同步周期、计划缓存和可信绑定缓存
 - 执行：`EXECUTION_RETENTION_DAYS`、`JOB_LOG_CACHE_SECONDS`、`UI_REFRESH_SECONDS`
 
 生产环境拒绝 `CORS_ORIGIN=*`，也默认拒绝 `AUTH_MODE=dev`。`ALLOW_DEV_AUTH_IN_PRODUCTION=true` 只允许用于隔离、受控的临时环境。
 
-> `AUTH_MODE=feishu` 当前只是预留值，不代表飞书 OAuth 已实现。它只会隐藏 dev 用户列表/切换接口；仓库没有 OAuth 跳转、回调和自动建会话逻辑。不要在文档、代码注释或交付说明中声称飞书登录可用。
+`AUTH_MODE=feishu` 启用正式飞书 OAuth。OAuth `state` 存在 PostgreSQL session 中并一次性消费，回调后必须重建 session。已登录内部用户可主动绑定飞书；禁止按姓名自动合并。`FEISHU_AUTO_PROVISION=false` 时只允许已绑定身份登录，租户白名单由 `FEISHU_ALLOWED_TENANT_KEYS` 控制。
 
 ## 数据库与迁移
 
@@ -127,7 +128,7 @@ DEV_USER_NAMES=张三,李四 npm run seed:dev
 
 三条业务路由：
 
-- `/login`：当前仅开发用户选择。
+- `/login`：dev 用户选择或飞书 OAuth 登录；配置飞书后，已登录未绑定用户可从页头主动绑定。
 - `/schedule`：全员甘特图。
 - `/my-tasks`：个人任务、筛选、同步和执行操作。
 

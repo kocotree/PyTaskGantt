@@ -241,6 +241,33 @@ test('user aliases and audit action validation match route contracts', async () 
   );
 });
 
+test('Feishu user repository binds stable identity without changing an existing dev provider', async () => {
+  const row = {
+    id: '8', display_name: '用户 A', avatar_url: 'https://example.invalid/avatar.png',
+    auth_provider: 'dev', feishu_open_id: 'ou_8', feishu_union_id: 'on_8',
+    feishu_tenant_key: 'tenant-1', is_active: true,
+    created_at: new Date(), updated_at: new Date(), last_login_at: new Date(),
+  };
+  const db = queueDb([{ rows: [row] }, { rows: [row] }, { rows: [row] }]);
+  const users = createUsersRepository(db);
+
+  const found = await users.findByFeishuIdentity({
+    openId: 'ou_8', unionId: 'on_8', tenantKey: 'tenant-1',
+  });
+  assert.equal(found.id, '8');
+  assert.deepEqual(db.calls[0].params, ['on_8', 'tenant-1', 'ou_8']);
+
+  await users.lockActiveById('8');
+  assert.match(db.calls[1].sql, /FOR UPDATE/);
+
+  const updated = await users.updateFeishuProfile('8', {
+    displayName: '用户 A', avatarUrl: row.avatar_url,
+    openId: 'ou_8', unionId: 'on_8', tenantKey: 'tenant-1',
+  });
+  assert.equal(updated.authProvider, 'dev');
+  assert.doesNotMatch(db.calls[2].sql, /auth_provider\s*=/);
+});
+
 test('batch mutation ids reject zero, unsafe numbers, and values outside PostgreSQL BIGINT', () => {
   const body = id => ({ mutations: [{ type: 'delete', id, version: 1 }] });
   for (const id of ['0', 'abc', '9223372036854775808', Number.MAX_SAFE_INTEGER + 1]) {

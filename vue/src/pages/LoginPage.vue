@@ -11,7 +11,7 @@
         </span>
         <div>
           <h1>RPA 任务看板</h1>
-          <p>选择开发用户进入排班沙盘</p>
+          <p>{{ auth.authMode === 'feishu' ? '使用飞书账号安全登录' : '选择开发用户进入排班沙盘' }}</p>
         </div>
       </div>
 
@@ -39,11 +39,20 @@
           <n-empty v-else-if="!loading" description="暂无可用开发用户" />
         </n-spin>
       </template>
-      <n-alert v-else type="info" :show-icon="true">
-        当前环境已关闭开发用户切换；本版本尚未接入飞书 OAuth，暂时无法在此登录。请联系运维使用受控开发模式，或先完成正式身份接入。
+
+      <div v-if="auth.feishuEnabled" class="feishu-login-action">
+        <span v-if="auth.authMode === 'dev'" class="login-divider">或</span>
+        <n-button type="primary" size="large" block @click="loginWithFeishu">
+          使用飞书登录
+        </n-button>
+      </div>
+      <n-alert v-else-if="auth.authMode === 'feishu'" type="error" :show-icon="true">
+        飞书登录配置不完整，请联系管理员。
       </n-alert>
 
-      <p class="login-footnote">开发用户切换仅用于本地与测试环境。</p>
+      <p class="login-footnote">
+        {{ auth.authMode === 'dev' ? '开发用户切换仅用于本地与测试环境。' : '登录即表示使用飞书身份建立本系统会话。' }}
+      </p>
     </n-card>
   </main>
 </template>
@@ -51,8 +60,8 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NAlert, NAvatar, NCard, NEmpty, NSpin, useMessage } from 'naive-ui'
-import { auth, listDevUsers, loadSession, switchDevUser } from '../services/authService.js'
+import { NAlert, NAvatar, NButton, NCard, NEmpty, NSpin, useMessage } from 'naive-ui'
+import { auth, feishuAuthorizationUrl, listDevUsers, loadSession, switchDevUser } from '../services/authService.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -88,5 +97,12 @@ async function chooseUser(user) {
   } finally {
     switchingId.value = ''
   }
+}
+
+function loginWithFeishu() {
+  const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/')
+    ? route.query.redirect
+    : '/schedule'
+  window.location.assign(feishuAuthorizationUrl({ intent: 'login', redirect }))
 }
 </script>

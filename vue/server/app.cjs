@@ -79,7 +79,12 @@ function createApp({
   }));
 
   app.use('/api/auth', requireAllowedOrigin(config.corsOrigins || ['*']));
-  app.use('/api/auth', createAuthRouter({ config, usersRepository: repositories.users }));
+  app.use('/api/auth', createAuthRouter({
+    config,
+    usersRepository: repositories.users,
+    feishuAuth: services.feishuAuth,
+    logger,
+  }));
   app.use('/api', requireAllowedOrigin(config.corsOrigins || ['*']), requireSession(repositories.users));
   app.use('/api', createTasksRouter({
     usersRepository: repositories.users,

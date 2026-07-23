@@ -61,6 +61,9 @@ function buildApp(overrides = {}) {
   return createApp({
     config: {
       authMode: 'dev',
+      feishuEnabled: false,
+      feishuAppBaseUrl: 'http://localhost:5174',
+      feishuStateTtlSeconds: 600,
       corsOrigins: ['http://localhost:5174'],
       sessionSecret: 'test-secret-test-secret-test-secret',
       sessionMaxAgeSeconds: 3600,
@@ -99,6 +102,7 @@ describe('Express 会话与权限边界', () => {
       authenticated: false,
       user: null,
       auth_mode: 'dev',
+      feishu_enabled: false,
       ui_refresh_seconds: 10,
     });
     await request(app).get('/api/auth/dev/users').expect(200);
@@ -217,6 +221,86 @@ describe('Express 会话与权限边界', () => {
     const app = buildApp({ config: { authMode: 'feishu' } });
     await request(app).get('/api/auth/dev/users').expect(404);
     await request(app).post('/api/auth/dev/switch').send({ user_id: '1' }).expect(404);
+  });
+
+  it('飞书 OAuth 登录校验 state、重建会话并安全跳回站内路径', async () => {
+    const completeAuthorization = vi.fn(async ({ code, bindUserId }) => {
+      expect(code).toBe('authorization-code');
+      expect(bindUserId).toBeNull();
+      return {
+        id: '3', displayName: '飞书用户', avatarUrl: null,
+        authProvider: 'feishu', isActive: true,
+        feishuOpenId: 'open-3', feishuTenantKey: 'tenant-1',
+      };
+    });
+    const app = buildApp({
+      config: { authMode: 'feishu', feishuEnabled: true },
+      services: {
+        feishuAuth: {
+          createAuthorizationUrl: ({ state }) => `https://accounts.feishu.cn/authorize?state=${state}`,
+          completeAuthorization,
+        },
+      },
+    });
+    const agent = request.agent(app);
+    const start = await agent
+      .get('/api/auth/feishu/start?redirect=%2Fmy-tasks')
+      .expect(302);
+    const state = new URL(start.headers.location).searchParams.get('state');
+    expect(state).toMatch(/^[A-Za-z0-9_-]+$/);
+
+    const callback = await agent
+      .get(`/api/auth/feishu/callback?state=${encodeURIComponent(state)}&code=authorization-code`)
+      .expect(303);
+    expect(callback.headers.location).toBe('http://localhost:5174/my-tasks');
+    expect(completeAuthorization).toHaveBeenCalledOnce();
+
+    const replay = await agent
+      .get(`/api/auth/feishu/callback?state=${encodeURIComponent(state)}&code=authorization-code`)
+      .expect(303);
+    expect(new URL(replay.headers.location).searchParams.get('error')).toContain('状态已失效');
+    expect(completeAuthorization).toHaveBeenCalledOnce();
+
+    const sessionResponse = await agent.get('/api/auth/session').expect(200);
+    expect(sessionResponse.body).toMatchObject({
+      authenticated: true,
+      feishu_enabled: true,
+      user: { id: '3' },
+    });
+  });
+
+  it('已登录用户可把飞书身份绑定到当前内部用户，错误 state 不会执行绑定', async () => {
+    const completeAuthorization = vi.fn(async ({ bindUserId }) => ({
+      id: bindUserId, displayName: '用户甲', authProvider: 'dev', isActive: true,
+      feishuOpenId: 'open-1', feishuTenantKey: 'tenant-1',
+    }));
+    const app = buildApp({
+      config: { feishuEnabled: true },
+      services: {
+        feishuAuth: {
+          createAuthorizationUrl: ({ state }) => `https://accounts.feishu.cn/authorize?state=${state}`,
+          completeAuthorization,
+        },
+      },
+    });
+    const agent = request.agent(app);
+    await agent.post('/api/auth/dev/switch').send({ user_id: '1' }).expect(200);
+    const start = await agent
+      .get('/api/auth/feishu/start?intent=bind&redirect=https%3A%2F%2Fevil.example')
+      .expect(302);
+    const state = new URL(start.headers.location).searchParams.get('state');
+
+    const invalid = await agent
+      .get('/api/auth/feishu/callback?state=wrong&code=ignored')
+      .expect(303);
+    expect(new URL(invalid.headers.location).searchParams.get('error')).toContain('状态已失效');
+    expect(completeAuthorization).not.toHaveBeenCalled();
+
+    const callback = await agent
+      .get(`/api/auth/feishu/callback?state=${encodeURIComponent(state)}&code=bind-code`)
+      .expect(303);
+    expect(callback.headers.location).toBe('http://localhost:5174/schedule');
+    expect(completeAuthorization).toHaveBeenCalledWith({ code: 'bind-code', bindUserId: '1' });
   });
 
   it('开发切换不能伪装成未来的飞书身份', async () => {

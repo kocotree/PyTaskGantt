@@ -2,7 +2,7 @@ const { createConfig, ConfigError } = require('../server/config.cjs');
 const { Client } = require('pg');
 
 function validEnv(overrides = {}) {
-  return {
+  const env = {
     NODE_ENV: 'development',
     DATABASE_URL: 'postgresql://app:password@db.example/pytaskgantt',
     AUTH_MODE: 'dev',
@@ -11,6 +11,13 @@ function validEnv(overrides = {}) {
     YINGDAO_ACCESS_KEY_SECRET: 'test-secret',
     ...overrides,
   };
+  if (env.AUTH_MODE === 'feishu') {
+    env.FEISHU_APP_ID ??= 'cli_test';
+    env.FEISHU_APP_SECRET ??= 'feishu-test-secret';
+    env.FEISHU_REDIRECT_URI ??= 'https://tasks.example.com/api/auth/feishu/callback';
+    env.APP_BASE_URL ??= 'https://tasks.example.com';
+  }
+  return env;
 }
 
 describe('运行时配置', () => {
@@ -183,9 +190,34 @@ describe('运行时配置', () => {
     expect(config.database.ssl.mode).toBe('disable');
     expect(config.cors.origins).toEqual(['https://tasks.example.com', 'https://admin.example.com']);
     expect(config.session.maxAgeSeconds).toBe(7200);
+    expect(config.feishu.enabled).toBe(false);
     expect(config.yingdao.syncIntervalSeconds).toBe(90);
     expect(config.retention.executionDays).toBe(45);
     expect(config.uiRefreshSeconds).toBe(12);
+  });
+
+  it('飞书模式要求完整 OAuth 配置并读取租户与自动建用户策略', () => {
+    expect(() => createConfig(validEnv({
+      AUTH_MODE: 'feishu',
+      FEISHU_APP_SECRET: '',
+    }))).toThrow(/FEISHU_APP_SECRET/);
+
+    const config = createConfig(validEnv({
+      AUTH_MODE: 'feishu',
+      FEISHU_AUTO_PROVISION: 'false',
+      FEISHU_ALLOWED_TENANT_KEYS: 'tenant-a, tenant-b,tenant-a',
+      FEISHU_REQUEST_TIMEOUT_MS: '8000',
+      FEISHU_STATE_TTL_SECONDS: '300',
+    }));
+    expect(config.feishu).toMatchObject({
+      enabled: true,
+      appId: 'cli_test',
+      appBaseUrl: 'https://tasks.example.com',
+      autoProvision: false,
+      allowedTenantKeys: ['tenant-a', 'tenant-b'],
+      requestTimeoutMs: 8000,
+      stateTtlSeconds: 300,
+    });
   });
 
   it('页面刷新周期不能低于前端支持的五秒', () => {

@@ -918,6 +918,27 @@ body,
   text-align: center;
 }
 
+.feishu-login-action {
+  margin-top: 16px;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  color: rgba(0, 0, 0, .35);
+  font-size: 12px;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #ececec;
+}
+
 .my-task-filter-card,
 .my-task-table-card {
   max-width: 1680px;

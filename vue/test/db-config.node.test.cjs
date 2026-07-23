@@ -60,6 +60,10 @@ test('production rejects wildcard CORS and accidental development auth', () => {
     SESSION_SECRET: 'x'.repeat(32),
     YINGDAO_ACCESS_KEY_ID: 'id',
     YINGDAO_ACCESS_KEY_SECRET: 'secret',
+    FEISHU_APP_ID: 'cli_test',
+    FEISHU_APP_SECRET: 'feishu-secret',
+    FEISHU_REDIRECT_URI: 'https://example.com/api/auth/feishu/callback',
+    APP_BASE_URL: 'https://example.com',
   };
   assert.throws(
     () => createConfig({ ...base, AUTH_MODE: 'dev', CORS_ORIGIN: 'https://example.com' }),

@@ -40,6 +40,17 @@ function createUsersRepository(db) {
     return findById(id, { ...options, activeOnly: true });
   }
 
+  async function lockActiveById(id, options = {}) {
+    const executor = resolveExecutor(options, db);
+    const { rows } = await executor.query(
+      `SELECT * FROM public.app_users
+        WHERE id = $1 AND is_active = TRUE
+        FOR UPDATE`,
+      [id]
+    );
+    return mapUserRow(rows[0]);
+  }
+
   async function findActiveDevById(id, options = {}) {
     const executor = resolveExecutor(options, db);
     const { rows } = await executor.query(
@@ -117,6 +128,7 @@ function createUsersRepository(db) {
          display_name, avatar_url, auth_provider,
          feishu_open_id, feishu_union_id, feishu_tenant_key, last_login_at
        ) VALUES ($1, $2, 'feishu', $3, $4, $5, $6)
+       ON CONFLICT DO NOTHING
        RETURNING *`,
       [
         data.displayName,
@@ -158,6 +170,7 @@ function createUsersRepository(db) {
   return Object.freeze({
     findById,
     findActiveById,
+    lockActiveById,
     findActiveDevById,
     listActive,
     listActiveDevUsers,

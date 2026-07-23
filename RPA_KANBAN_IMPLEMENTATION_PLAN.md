@@ -25,7 +25,7 @@ rpa_kanban 是一个单人本地运行的影刀个人任务看板，使用 Pytho
 5. 每条新任务必须绑定一个唯一的影刀 scheduleUuid。
 6. 从影刀集中同步真实运行状态、执行历史和日志。
 7. 支持用户主动同步自己的全部任务和立即执行单个任务。
-8. 开发阶段通过手动切换用户模拟登录，后续无缝替换为飞书 OAuth。
+8. 开发阶段可手动切换用户，生产支持飞书 OAuth 登录与现有用户主动绑定。
 9. 保留现有“修改后点击保存”的交互方式，但不再整表覆盖数据库。
 10. 支持 100+ 任务、5～10 名用户、高频计划和最长 2 小时以上的执行场景。
 
@@ -36,7 +36,6 @@ rpa_kanban 是一个单人本地运行的影刀个人任务看板，使用 Pytho
 - 不运行 rpa_kanban 的 Python 服务。
 - 不读写 rpa_kanban 的 Excel 文件。
 - 不再支持 file、CSV 或 JSON 作为运行时数据源；CSV/JSON 仅作为导入导出传输格式。
-- 不在本期接入飞书 OAuth。
 - 不在本期发送飞书消息通知。
 - 不通过本系统创建、修改或删除影刀计划。
 - 不校验当前用户是否真的是影刀计划创建者。
@@ -219,7 +218,7 @@ vue/
 
 ### 7.1 app_users
 
-用途：保存开发用户和未来飞书用户。
+用途：保存开发用户、飞书用户及其稳定身份绑定。
 
 建议字段：
 
@@ -340,7 +339,7 @@ vue/
 
 ### 7.6 会话存储
 
-不使用 Express 默认 MemoryStore。建议使用 PostgreSQL 会话存储，使开发重启和未来飞书登录可复用相同会话模型。
+不使用 Express 默认 MemoryStore。使用 PostgreSQL 会话存储，使开发切换和飞书登录复用相同会话模型。
 
 可采用 express-session + connect-pg-simple，Cookie 至少设置：
 
@@ -390,15 +389,14 @@ storage/
 
 生产环境若检测到 AUTH_MODE=dev，应显式拒绝启动或至少要求额外的开发开关，避免误开放身份切换。
 
-### 9.2 飞书预留
+### 9.2 飞书登录与绑定
 
-未来接入飞书 OAuth 后：
-
-1. OAuth 回调获得飞书稳定身份。
-2. 按 tenant_key + open_id 或 union_id 查找 app_users。
-3. 首次登录自动创建用户。
-4. 更新姓名、头像和 last_login_at。
-5. 写入与开发模式相同的 session.user_id。
+1. OAuth 回调校验 PostgreSQL session 中一次性 `state`，再获得飞书稳定身份。
+2. 优先按 union_id，否则按 tenant_key + open_id 查找 app_users。
+3. 已登录内部用户可主动绑定；不按显示名称自动合并。
+4. 未绑定身份是否首次登录自动创建用户由 FEISHU_AUTO_PROVISION 控制。
+5. 更新姓名、头像和 last_login_at，成功后重建 session 并写入 session.user_id。
+6. 可用 FEISHU_ALLOWED_TENANT_KEYS 限制允许登录的租户。
 
 任务权限层不感知身份提供方，只读取 session.user_id。
 
